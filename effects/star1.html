@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>可交互的3D星空</title>
+
+  <!-- OG 分享标签（请填入你的分享信息） -->
+  <meta property="og:title" content="">
+  <meta property="og:description" content="">
+  <meta property="og:image" content="">
+
+  <style>
+    * { margin: 0; padding: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    let w, h;
+    let stars = [];
+    let dialogs = [];          // 对话框数组
+    let hearts = [];           // 爱心粒子数组
+    let meteors = [];          // 流星数组
+    let angleX = 0;            // 绕X轴旋转角度（上下拖）
+    let angleY = 0;            // 绕Y轴旋转角度（左右拖）
+    const ZOOM = 300;          // 固定视角远近（不可缩放）
+    const DIALOG_COUNT = 50;   // 对话框数量
+    const MAX_HEARTS = 120;    // 爱心粒子上限（防卡顿）
+    const MAX_METEORS = 6;     // 同时最多流星数
+
+    // 鼠标交互变量
+    let isDragging = false;
+    let lastMouseX, lastMouseY;
+
+    // 惯性 + 自动旋转
+    let velX = 0, velY = 0;           // 旋转惯性速度
+    let lastInteract = 0;             // 最后交互时间
+    const AUTO_DELAY = 2000;          // 2秒无交互后自动旋转
+    const AUTO_SPEED = 0.0003;        // 自动旋转速度
+    const INERTIA = 0.95;             // 惯性衰减系数
+
+    // ============================================================
+    //  对话框颜色库（不含黑色和白色，选鲜艳的颜色）
+    // ============================================================
+    const DIALOG_COLORS = [
+      '#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7',
+      '#DDA0DD','#FF9FF3','#54A0FF','#5F27CD','#01A3A4',
+      '#F368E0','#FF6348','#7BED9F','#70A1FF','#FFA502',
+      '#2ED573','#1E90FF','#FF4757','#A29BFE','#FD79A8',
+      '#00D2D3','#FECA57','#FF6B6B','#48DBFB','#FF9FF3',
+      '#F368E0','#FFC312','#C4E538','#6AB04C','#E056A0',
+      '#FF8C00','#20B2AA','#DA70D6','#6495ED','#FF1493',
+      '#00CED1','#FFD700','#8A2BE2','#00FF7F','#FF4500',
+      '#1E90FF','#FF69B4','#3CB371','#FFA07A','#9370DB',
+      '#00BFFF','#FF6347','#66CDAA','#EE82EE','#FFDAB9'
+    ];
+
+    // 星云背景缓存（必须在 resize() 之前声明）
+    let nebulaCanvas = null;
+    let nebulaDirty = true;
+
+    function resize() {
+      w = canvas.width = innerWidth;
+      h = canvas.height = innerHeight;
+      nebulaDirty = true;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ============================================================
+    //  星云背景（离屏 Canvas 缓存，只在 resize 时重绘）
+    // ============================================================
+
+    function drawNebula() {
+      if (!nebulaDirty && nebulaCanvas) return nebulaCanvas;
+      nebulaCanvas = document.createElement('canvas');
+      nebulaCanvas.width = w;
+      nebulaCanvas.height = h;
+      const nctx = nebulaCanvas.getContext('2d');
+
+      // 星云1：深紫，左上区域
+      const g1 = nctx.createRadialGradient(w * 0.2, h * 0.3, 0, w * 0.2, h * 0.3, Math.max(w, h) * 0.6);
+      g1.addColorStop(0, 'rgba(80, 20, 120, 0.12)');
+      g1.addColorStop(0.5, 'rgba(40, 10, 80, 0.05)');
+      g1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      nctx.fillStyle = g1;
+      nctx.fillRect(0, 0, w, h);
+
+      // 星云2：蓝色，右下区域
+      const g2 = nctx.createRadialGradient(w * 0.75, h * 0.7, 0, w * 0.75, h * 0.7, Math.max(w, h) * 0.5);
+      g2.addColorStop(0, 'rgba(20, 60, 160, 0.10)');
+      g2.addColorStop(0.5, 'rgba(10, 30, 100, 0.04)');
+      g2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      nctx.fillStyle = g2;
+      nctx.fillRect(0, 0, w, h);
+
+      // 星云3：粉色，右上区域
+      const g3 = nctx.createRadialGradient(w * 0.7, h * 0.25, 0, w * 0.7, h * 0.25, Math.max(w, h) * 0.45);
+      g3.addColorStop(0, 'rgba(180, 40, 100, 0.08)');
+      g3.addColorStop(0.5, 'rgba(100, 20, 60, 0.03)');
+      g3.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      nctx.fillStyle = g3;
+      nctx.fillRect(0, 0, w, h);
+
+      // 星云4：青绿色，左下区域
+      const g4 = nctx.createRadialGradient(w * 0.3, h * 0.75, 0, w * 0.3, h * 0.75, Math.max(w, h) * 0.4);
+      g4.addColorStop(0, 'rgba(20, 140, 140, 0.07)');
+      g4.addColorStop(0.5, 'rgba(10, 80, 80, 0.03)');
+      g4.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      nctx.fillStyle = g4;
+      nctx.fillRect(0, 0, w, h);
+
+      nebulaDirty = false;
+      return nebulaCanvas;
+    }
+
+    // ============================================================
+    //  生成 500 颗星星的 3D 坐标（含闪烁和颜色信息）
+    // ============================================================
+    for (let i = 0; i < 500; i++) {
+      // 70% 纯白，15% 淡蓝，15% 淡黄
+      const r = Math.random();
+      stars.push({
+        x: (Math.random() - 0.5) * 600,
+        y: (Math.random() - 0.5) * 600,
+        z: (Math.random() - 0.5) * 600,
+        // 闪烁参数
+        twinkleSpeed: 0.3 + Math.random() * 1.2,  // 闪烁频率
+        twinklePhase: Math.random() * Math.PI * 2,  // 初始相位
+        // 颜色：纯白 / 淡蓝 / 淡黄
+        hue: r < 0.7 ? 0 : (r < 0.85 ? 210 : 45),
+        sat: r < 0.7 ? 0 : 30,
+        baseBright: 0.4 + Math.random() * 0.6       // 基础亮度
+      });
+    }
+
+    // ============================================================
+    //  生成对话框的 3D 坐标（含浮动动画参数）
+    // ============================================================
+    function createDialog() {
+      return {
+        x: (Math.random() - 0.5) * 800,
+        y: (Math.random() - 0.5) * 800,
+        z: (Math.random() - 0.5) * 700,
+        color: DIALOG_COLORS[Math.floor(Math.random() * DIALOG_COLORS.length)],
+        boxW: 60 + Math.random() * 80,
+        boxH: 25 + Math.random() * 30,
+        floatPhase: Math.random() * Math.PI * 2,  // 浮动动画相位
+        floatSpeed: 0.5 + Math.random() * 1.0      // 浮动速度
+      };
+    }
+
+    for (let i = 0; i < DIALOG_COUNT; i++) {
+      dialogs.push(createDialog());
+    }
+
+    // ============================================================
+    //  生成一颗流星
+    // ============================================================
+    function spawnMeteor() {
+      // 从屏幕边缘随机位置出发，朝对侧飞去
+      const edge = Math.floor(Math.random() * 4); // 0:上 1:右 2:下 3:左
+      let sx, sy, angle;
+      const margin = 50;
+      if (edge === 0) { // 从上边
+        sx = Math.random() * w;
+        sy = -margin;
+        angle = Math.PI / 4 + Math.random() * Math.PI / 2; // 右下方向
+      } else if (edge === 1) { // 从右边
+        sx = w + margin;
+        sy = Math.random() * h;
+        angle = Math.PI + Math.random() * Math.PI / 2; // 左下方向
+      } else if (edge === 2) { // 从下边
+        sx = Math.random() * w;
+        sy = h + margin;
+        angle = -Math.PI / 2 - Math.random() * Math.PI / 2; // 左上方向
+      } else { // 从左边
+        sx = -margin;
+        sy = Math.random() * h;
+        angle = -Math.random() * Math.PI / 2; // 右上方向
+      }
+      const speed = 3 + Math.random() * 5;
+      meteors.push({
+        x: sx, y: sy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 80 + Math.random() * 60,   // 存活帧数
+        maxLife: 140,
+        length: 40 + Math.random() * 60   // 拖尾长度
+      });
+    }
+
+    // ============================================================
+    //  3D 旋转函数
+    // ============================================================
+    function rotateX(p, angle) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      return { x: p.x, y: p.y * cos - p.z * sin, z: p.y * sin + p.z * cos };
+    }
+    function rotateY(p, angle) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      return { x: p.x * cos + p.z * sin, y: p.y, z: -p.x * sin + p.z * cos };
+    }
+
+    // ============================================================
+    //  绘制对话框（圆角矩形 + 底部三角尾巴 + "like you"）
+    //  边缘发光对应颜色，字体为楷体，带浮动动画
+    // ============================================================
+    function drawDialogBox(sx, sy, boxW, boxH, color, scale) {
+      const r = Math.min(8 * scale, 12);
+      const tH = 6 * scale;
+      const tW = 10 * scale;
+      const hw = boxW / 2;
+      const hh = boxH / 2;
+
+      ctx.save();
+
+      // 边缘发光
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14 * scale;
+
+      // 主体
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.88;
+      ctx.beginPath();
+      ctx.moveTo(sx - hw + r, sy - hh);
+      ctx.lineTo(sx + hw - r, sy - hh);
+      ctx.arcTo(sx + hw, sy - hh, sx + hw, sy - hh + r, r);
+      ctx.lineTo(sx + hw, sy + hh - r);
+      ctx.arcTo(sx + hw, sy + hh, sx + hw - r, sy + hh, r);
+      ctx.lineTo(sx + tW / 2, sy + hh);
+      ctx.lineTo(sx, sy + hh + tH);
+      ctx.lineTo(sx - tW / 2, sy + hh);
+      ctx.lineTo(sx - hw + r, sy + hh);
+      ctx.arcTo(sx - hw, sy + hh, sx - hw, sy + hh - r, r);
+      ctx.lineTo(sx - hw, sy - hh + r);
+      ctx.arcTo(sx - hw, sy - hh, sx - hw + r, sy - hh, r);
+      ctx.closePath();
+      ctx.fill();
+
+      // 边框
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      // 文字 "like you"（楷体）
+      const fontSize = Math.max(8, 11 * scale);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${fontSize}px "KaiTi", "楷体", "STKaiti", serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('like you', sx, sy - 2 * scale);
+
+      ctx.restore();
+    }
+
+    // ============================================================
+    //  绘制一颗星星（简洁圆点）
+    // ============================================================
+    function drawStar(sx, sy, r, alpha) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fill();
+    }
+
+    // ============================================================
+    //  绘制红色爱心
+    // ============================================================
+    function drawHeart(x, y, alpha, size) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#ff3040';
+      ctx.font = `${size}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('♥', x, y);
+      ctx.restore();
+    }
+
+    // ============================================================
+    //  绘制流星（带渐变拖尾）
+    // ============================================================
+    function drawMeteor(m) {
+      const headX = m.x;
+      const headY = m.y;
+      const tailX = headX - m.vx * m.length / 5;
+      const tailY = headY - m.vy * m.length / 5;
+      const alpha = m.life / m.maxLife;
+
+      const grad = ctx.createLinearGradient(headX, headY, tailX, tailY);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.2, `rgba(200,220,255,${alpha * 0.7})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+
+      ctx.beginPath();
+      ctx.moveTo(headX, headY);
+      ctx.lineTo(tailX, tailY);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // 头部光点
+      ctx.beginPath();
+      ctx.arc(headX, headY, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fill();
+    }
+
+    // ============================================================
+    //  主渲染循环
+    // ============================================================
+    function draw(ts) {
+      // --- 惯性衰减 + 自动旋转 ---
+      if (!isDragging) {
+        velX *= INERTIA;
+        velY *= INERTIA;
+        angleX += velX;
+        angleY += velY;
+
+        if (Math.abs(velX) < 0.0001 && Math.abs(velY) < 0.0001) {
+          if (ts - lastInteract > AUTO_DELAY) {
+            angleY += AUTO_SPEED;
+          }
+        }
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // --- 星云背景（缓存在离屏 Canvas） ---
+      const nebula = drawNebula();
+      ctx.drawImage(nebula, 0, 0);
+
+      // --- 绘制星星（带光晕 + 闪烁 + 颜色） ---
+      for (let s of stars) {
+        let p = rotateX(s, angleX);
+        p = rotateY(p, angleY);
+        if (p.z <= -ZOOM + 10) continue;
+
+        const scale = ZOOM / (ZOOM + p.z);
+        const sx = w / 2 + p.x * scale;
+        const sy = h / 2 + p.y * scale;
+        const r = Math.max(0.5, scale * 2.5);
+
+        // 亮度（无闪烁，仅根据距离和基础亮度变化）
+        const brightness = Math.min(1, s.baseBright * scale * 1.5);
+        drawStar(sx, sy, r, brightness);
+      }
+
+      // --- 流星 ---
+      // 随机生成新流星
+      if (meteors.length < MAX_METEORS && Math.random() < 0.02) {
+        spawnMeteor();
+      }
+      // 更新流星
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.x += m.vx;
+        m.y += m.vy;
+        m.life--;
+        if (m.life <= 0 || m.x < -200 || m.x > w + 200 || m.y < -200 || m.y > h + 200) {
+          meteors.splice(i, 1);
+        }
+      }
+      // 绘制流星
+      for (let m of meteors) {
+        drawMeteor(m);
+      }
+
+      // --- 处理对话框 ---
+      const visibleDialogs = [];
+      const removeIndices = [];
+
+      for (let i = 0; i < dialogs.length; i++) {
+        const d = dialogs[i];
+        let p = rotateX({ x: d.x, y: d.y, z: d.z }, angleX);
+        p = rotateY(p, angleY);
+
+        if (p.z <= -ZOOM + 10) { removeIndices.push(i); continue; }
+
+        const scale = ZOOM / (ZOOM + p.z);
+        const sx = w / 2 + p.x * scale;
+        const sy = h / 2 + p.y * scale;
+
+        const margin = 100;
+        if (sx < -margin || sx > w + margin || sy < -margin || sy > h + margin) {
+          removeIndices.push(i); continue;
+        }
+
+        // 浮动动画：上下轻微浮动
+        const floatY = Math.sin(ts * 0.001 * d.floatSpeed + d.floatPhase) * 5 * scale;
+
+        visibleDialogs.push({
+          sx, sy: sy + floatY,
+          boxW: d.boxW * scale,
+          boxH: d.boxH * scale,
+          color: d.color,
+          scale: scale,
+          z: p.z
+        });
+      }
+
+      for (let i = removeIndices.length - 1; i >= 0; i--) {
+        dialogs.splice(removeIndices[i], 1);
+      }
+      while (dialogs.length < DIALOG_COUNT) {
+        dialogs.push(createDialog());
+      }
+
+      visibleDialogs.sort((a, b) => b.z - a.z);
+      for (let d of visibleDialogs) {
+        drawDialogBox(d.sx, d.sy, d.boxW, d.boxH, d.color, d.scale);
+      }
+
+      // --- 爱心粒子 ---
+      if (hearts.length < MAX_HEARTS) {
+        for (let d of visibleDialogs) {
+          if (Math.random() < 0.25) {
+            hearts.push({
+              x: d.sx + (Math.random() - 0.5) * d.boxW * 0.6,
+              y: d.sy - d.boxH / 2,
+              vy: -0.15 - Math.random() * 0.25,
+              alpha: 1,
+              size: 8 + Math.random() * 7,
+              life: 50 + Math.random() * 40
+            });
+          }
+        }
+      }
+      for (let i = hearts.length - 1; i >= 0; i--) {
+        const h = hearts[i];
+        h.y += h.vy;
+        h.life--;
+        h.alpha = h.life / 90;
+        if (h.life <= 0 || h.alpha <= 0) hearts.splice(i, 1);
+      }
+      for (let h of hearts) {
+        drawHeart(h.x, h.y, h.alpha, h.size);
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    // --- 记录交互时间 ---
+    function markInteract() { lastInteract = performance.now(); }
+
+    // --- 鼠标交互 ---
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      lastMouseX = e.clientX; lastMouseY = e.clientY;
+      velX = 0; velY = 0;
+      markInteract();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      angleY += dx * 0.005;
+      angleX += dy * 0.005;
+      velY = dx * 0.005; velX = dy * 0.005;
+      lastMouseX = e.clientX; lastMouseY = e.clientY;
+      markInteract();
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; markInteract(); });
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); });
+
+    // --- 触摸交互 ---
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      markInteract();
+      velX = 0; velY = 0;
+      isDragging = true;
+      lastMouseX = e.touches[0].clientX;
+      lastMouseY = e.touches[0].clientY;
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!isDragging || e.touches.length !== 1) return;
+      markInteract();
+      const dx = e.touches[0].clientX - lastMouseX;
+      const dy = e.touches[0].clientY - lastMouseY;
+      angleY += dx * 0.005;
+      angleX += dy * 0.005;
+      velY = dx * 0.005; velX = dy * 0.005;
+      lastMouseX = e.touches[0].clientX;
+      lastMouseY = e.touches[0].clientY;
+    });
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      isDragging = false;
+      markInteract();
+    });
+
+    lastInteract = performance.now();
+    requestAnimationFrame(draw);
+  </script>
+</body>
+</html>
