@@ -5,7 +5,7 @@ const path = require('path');
 const effectsDir = path.join(__dirname, 'effects');
 const files = fs.readdirSync(effectsDir).filter(f => f.endsWith('.html'));
 
-// 你的专属密码，从环境变量读取（部署时 Vercel 会注入）
+// 你的专属密码，从环境变量读取（部署时 Cloudflare Pages 会注入）
 const password = process.env.ADMIN_PASSWORD || '123456'; // 本地测试默认值
 
 // 管理后台 HTML 模板
@@ -72,10 +72,19 @@ const adminHTML = `<!DOCTYPE html>
 // 确保 dist 目录存在
 const distDir = path.join(__dirname, 'dist');
 if (!fs.existsSync(distDir)) fs.mkdirSync(distDir);
+
 // 复制 effects 文件夹到 dist
 copyFolderSync(path.join(__dirname, 'effects'), path.join(distDir, 'effects'));
+
+// 👇 新增：复制 images 文件夹到 dist（让图片能在网站上访问）
+copyFolderSync(path.join(__dirname, 'images'), path.join(distDir, 'images'));
+
+// 👇 新增：复制 audio 文件夹到 dist（让音频能在网站上访问）
+copyFolderSync(path.join(__dirname, 'audio'), path.join(distDir, 'audio'));
+
 // 写入 admin.html
 fs.writeFileSync(path.join(distDir, 'admin.html'), adminHTML);
+
 // 复制一个首页（可选）
 fs.writeFileSync(path.join(distDir, 'index.html'), `<meta http-equiv="refresh" content="0;url=/admin.html">`);
 
