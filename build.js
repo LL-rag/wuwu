@@ -101,6 +101,7 @@ function copyFolderSync(src, dest) {
       copyFolderSync(srcPath, destPath);
     } else {
       fs.copyFileSync(srcPath, destPath);
+      
     }
   }
 }
