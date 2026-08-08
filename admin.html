@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>特效管理</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; }
+    #loginBox, #listBox { max-width: 500px; margin: 50px auto; }
+    input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    .hidden { display: none; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 10px 0; background: #222; padding: 12px; border-radius: 6px; }
+    a { color: #4ea1f3; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div id="loginBox">
+    <h2>管理后台</h2>
+    <input type="password" id="pwdInput" placeholder="请输入专属密钥" />
+    <button id="loginBtn">进入</button>
+    <p id="error" style="color:red;"></p>
+  </div>
+
+  <div id="listBox" class="hidden">
+    <h2>我的特效列表</h2>
+    <p>点击链接复制发送给客户（直接全屏演示）</p>
+    <ul id="effectList"></ul>
+  </div>
+
+  <script>
+    var PASS = "123456";
+    var BASE = window.location.origin;
+
+    // 从当前页面加载特效列表
+    fetch('/effects/')
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var links = doc.querySelectorAll('a');
+        var files = [];
+        links.forEach(function(a) {
+          var href = a.getAttribute('href');
+          if (href && href.endsWith('.html')) {
+            files.push(href.replace('/effects/', ''));
+          }
+        });
+        window.EFFECTS = files;
+      })
+      .catch(function() {
+        // 如果目录列表不可用，使用硬编码列表
+        window.EFFECTS = ["ceshi.html","star1.html","starfall.html","星空特效2.html"];
+      });
+
+    document.getElementById('loginBtn').onclick = function() {
+      var input = document.getElementById('pwdInput').value;
+      if (input === PASS) {
+        document.getElementById('loginBox').classList.add('hidden');
+        document.getElementById('listBox').classList.remove('hidden');
+        renderList();
+      } else {
+        document.getElementById('error').textContent = '密钥错误';
+      }
+    };
+
+    function renderList() {
+      var ul = document.getElementById('effectList');
+      ul.innerHTML = '';
+      (window.EFFECTS || []).forEach(function(file) {
+        var url = BASE + '/effects/' + file;
+        var li = document.createElement('li');
+        li.innerHTML = '<strong>' + file.replace('.html','') + '</strong><br><a href="' + url + '" target="_blank">' + url + '</a>';
+        ul.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
