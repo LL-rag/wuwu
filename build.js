@@ -1,12 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
+console.log('=== 构建开始 ===');
+console.log('当前目录:', __dirname);
+
 // 读取特效文件夹，生成文件列表
 const effectsDir = path.join(__dirname, 'effects');
 const files = fs.readdirSync(effectsDir).filter(f => f.endsWith('.html'));
+console.log('特效文件:', files);
 
-// 你的专属密码，从环境变量读取（部署时 Cloudflare Pages 会注入）
-const password = process.env.ADMIN_PASSWORD || '123456'; // 本地测试默认值
+// 你的专属密码
+const password = process.env.ADMIN_PASSWORD || '123456';
 
 // 管理后台 HTML 模板
 const adminHTML = `<!DOCTYPE html>
@@ -73,26 +77,13 @@ const adminHTML = `<!DOCTYPE html>
 const distDir = path.join(__dirname, 'dist');
 if (!fs.existsSync(distDir)) fs.mkdirSync(distDir);
 
-// 复制 effects 文件夹到 dist
-copyFolderSync(path.join(__dirname, 'effects'), path.join(distDir, 'effects'));
-
-// 👇 新增：复制 images 文件夹到 dist（让图片能在网站上访问）
-copyFolderSync(path.join(__dirname, 'images'), path.join(distDir, 'images'));
-
-// 👇 新增：复制 audio 文件夹到 dist（让音频能在网站上访问）
-copyFolderSync(path.join(__dirname, 'audio'), path.join(distDir, 'audio'));
-
-// 写入 admin.html
-fs.writeFileSync(path.join(distDir, 'admin.html'), adminHTML);
-
-// 复制一个首页（可选）
-fs.writeFileSync(path.join(distDir, 'index.html'), `<meta http-equiv="refresh" content="0;url=/admin.html">`);
-
-console.log('构建完成，密码已注入，特效列表：', files);
-
-// 辅助复制文件夹函数
+// 复制文件夹的辅助函数
 function copyFolderSync(src, dest) {
-  if (!fs.existsSync(dest)) fs.mkdirSync(dest);
+  if (!fs.existsSync(src)) {
+    console.log('⚠ 源目录不存在，跳过:', src);
+    return;
+  }
+  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (let entry of entries) {
     const srcPath = path.join(src, entry.name);
@@ -101,7 +92,44 @@ function copyFolderSync(src, dest) {
       copyFolderSync(srcPath, destPath);
     } else {
       fs.copyFileSync(srcPath, destPath);
-      
+    }
+  }
+  console.log('✓ 已复制:', src, '→', dest, '(', entries.length, '个文件)');
+}
+
+// 复制 effects 文件夹
+console.log('\n--- 复制 effects ---');
+copyFolderSync(path.join(__dirname, 'effects'), path.join(distDir, 'effects'));
+
+// 复制 images 文件夹
+console.log('\n--- 复制 images ---');
+copyFolderSync(path.join(__dirname, 'images'), path.join(distDir, 'images'));
+
+// 复制 audio 文件夹
+console.log('\n--- 复制 audio ---');
+copyFolderSync(path.join(__dirname, 'audio'), path.join(distDir, 'audio'));
+
+// 写入 admin.html
+fs.writeFileSync(path.join(distDir, 'admin.html'), adminHTML);
+console.log('\n✓ 已生成 admin.html');
+
+// 写入首页
+fs.writeFileSync(path.join(distDir, 'index.html'), `<meta http-equiv="refresh" content="0;url=/admin.html">`);
+console.log('✓ 已生成 index.html');
+
+// 列出 dist 目录内容，确认所有文件都在
+console.log('\n=== dist 目录内容 ===');
+function listDir(dir, indent) {
+  indent = indent || '';
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    console.log(indent + (entry.isDirectory() ? '[DIR] ' : '[FILE] ') + entry.name);
+    if (entry.isDirectory()) {
+      listDir(path.join(dir, entry.name), indent + '  ');
     }
   }
 }
+listDir(distDir);
+
+console.log('\n=== 构建完成 ===');
