@@ -90,6 +90,7 @@ function copyFolderSync(src, dest) {
 copyFolderSync(path.join(__dirname, 'effects'), path.join(distDir, 'effects'));
 copyFolderSync(path.join(__dirname, 'images'), path.join(distDir, 'images'));
 copyFolderSync(path.join(__dirname, 'audio'), path.join(distDir, 'audio'));
+copyFolderSync(path.join(__dirname, 'video'), path.join(distDir, 'video'));
 
 fs.writeFileSync(path.join(distDir, 'admin.html'), adminHTML);
 fs.writeFileSync(path.join(distDir, 'index.html'), `<meta http-equiv="refresh" content="0;url=/admin.html">`);
