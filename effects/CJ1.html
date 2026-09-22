@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>幸运大转盘 - 可管理奖品版</title>
+
+<!-- ===== OG 分享标签（请替换为你的实际标题 / 描述 / 封面图地址） ===== -->
+<meta property="og:title" content="幸运大转盘 - 抽奖特效">
+<meta property="og:description" content="金色节日大转盘，支持自定义奖品、动态均分，一键开抽。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://www.wuwutech.top/images/lucky-wheel-cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
+
+<style>
+:root{
+  /* 转盘尺寸：桌面 480px，移动端 90% 屏宽，同时受视口高度约束（保证无滚动条） */
+  --wheel: min(480px, 90vw, 58dvh);
+  --gold: #FFD700;
+  --red: #FF6B6B; --yellow: #FFE66D; --blue: #4ECDC4;
+  --purple: #A66CFF; --green: #6BCB77; --orange: #FF9F43;
+  --palette: var(--red), var(--yellow), var(--blue), var(--purple), var(--green), var(--orange);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  width:100vw;height:100vh;height:100dvh;
+  background:linear-gradient(160deg,#1a1a2e 0%,#16213e 60%,#0f1630 100%);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  user-select:none;-webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* 背景漂浮金光粒子（节日氛围） */
+.bg-spark{
+  position:fixed;border-radius:50%;pointer-events:none;z-index:0;
+  background:radial-gradient(circle,#fff8d0 0%,#ffd700 45%,transparent 72%);
+  filter:blur(.5px);
+  animation:sparkFloat linear infinite;
+}
+@keyframes sparkFloat{
+  0%{transform:translateY(18vh) scale(.6);opacity:0}
+  12%{opacity:.85}
+  88%{opacity:.5}
+  100%{transform:translateY(-105vh) scale(1.15);opacity:0}
+}
+
+.page{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;
+  gap:14px;padding:10px 16px 60px;
+}
+.title{
+  color:var(--gold);
+  font-size:clamp(20px,4.6vw,28px);font-weight:900;letter-spacing:8px;
+  text-shadow:0 0 20px rgba(255,215,0,.55),0 2px 4px rgba(0,0,0,.5);
+}
+
+/* ================= 转盘区 ================= */
+.wheel-wrap{position:relative;width:var(--wheel);height:var(--wheel);touch-action:none}
+.wheel-wrap.pulse{animation:wrapPulse .4s ease}
+@keyframes wrapPulse{0%{transform:scale(1)}40%{transform:scale(1.025)}100%{transform:scale(1)}}
+
+/* 指针（12 点方向固定，不随转盘转动） */
+.pointer{
+  position:absolute;left:50%;top:-10px;z-index:10;
+  width:0;height:0;
+  border-left:20px solid transparent;border-right:20px solid transparent;
+  border-top:52px solid #FF4757;
+  filter:drop-shadow(0 5px 8px rgba(0,0,0,.55));
+  transform-origin:50% 100%;
+  animation:pointerIdle 2.4s ease-in-out infinite;
+}
+.pointer.swing{animation:pointerSwing .95s ease-in-out}
+.pointer-base{
+  position:absolute;left:50%;top:30px;z-index:9;
+  width:30px;height:30px;border-radius:50%;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 35% 30%,#fff3b0,#ffd700 55%,#b8860b);
+  box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 14px rgba(255,215,0,.6);
+}
+@keyframes pointerIdle{
+  0%,100%{transform:translateX(-50%) rotate(-4deg)}
+  50%{transform:translateX(-50%) rotate(4deg)}
+}
+@keyframes pointerSwing{
+  0%{transform:translateX(-50%) rotate(14deg)}
+  30%{transform:translateX(-50%) rotate(-12deg)}
+  60%{transform:translateX(-50%) rotate(7deg)}
+  85%{transform:translateX(-50%) rotate(-3deg)}
+  100%{transform:translateX(-50%) rotate(0)}
+}
+
+/* 转盘本体（SVG 内容动态重建） */
+.wheel{
+  position:absolute;inset:0;border-radius:50%;cursor:grab;
+  border:8px solid var(--gold);
+  background:#fff;
+  box-shadow:0 0 26px rgba(255,215,0,.7),0 0 70px rgba(255,215,0,.32),inset 0 0 22px rgba(0,0,0,.28);
+  transition:transform 4.6s cubic-bezier(0.17,0.67,0.23,0.99);
+  will-change:transform;
+}
+.wheel.dragging{cursor:grabbing}
+.wheel svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wheel.spinning .bulb{animation-duration:.28s}
+
+/* 边缘闪烁灯泡（16 颗，随转盘转动） */
+.bulb{
+  position:absolute;width:12px;height:12px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff,#ffd700 62%,#b8860b);
+  animation:bulbBlink 1.15s ease-in-out infinite;
+}
+@keyframes bulbBlink{
+  0%,100%{opacity:1;box-shadow:0 0 13px 3px rgba(255,215,0,.95)}
+  50%{opacity:.3;box-shadow:0 0 3px 1px rgba(255,215,0,.35)}
+}
+
+/* 中心「开始抽奖」按钮 */
+.center-btn{
+  position:absolute;left:50%;top:50%;z-index:11;
+  width:clamp(92px,27vw,118px);height:clamp(92px,27vw,118px);
+  transform:translate(-50%,-50%);
+  border-radius:50%;border:4px solid #fff;cursor:pointer;
+  background:radial-gradient(circle at 35% 30%,#fff2b0,#ffd700 45%,#e6a800 85%);
+  color:#8b2500;font-size:clamp(17px,5.2vw,21px);font-weight:900;letter-spacing:1px;
+  font-family:inherit;line-height:1.3;
+  box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 22px rgba(255,215,0,.6);
+  transition:transform .18s ease,filter .18s ease,opacity .2s;
+}
+.center-btn:hover{transform:translate(-50%,-50%) scale(1.08)}
+.center-btn:active{transform:translate(-50%,-50%) scale(.93)}
+.center-btn:disabled{filter:grayscale(.5) brightness(.8);opacity:.65;cursor:not-allowed}
+
+/* ================= 下方管理区按钮 ================= */
+.manage-btn{
+  padding:12px 34px;border:2px dashed rgba(255,215,0,.75);border-radius:36px;cursor:pointer;
+  color:var(--gold);font-family:inherit;font-size:clamp(15px,4vw,17px);font-weight:700;letter-spacing:2px;
+  background:rgba(255,215,0,.07);
+  transition:all .18s ease;
+}
+.manage-btn:hover{background:rgba(255,215,0,.16);transform:translateY(-2px)}
+.manage-btn:active{transform:scale(.96)}
+.manage-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.hint-note{font-size:12px;color:rgba(255,255,255,.4);letter-spacing:1px;min-height:16px}
+
+/* ================= 奖品管理弹窗 ================= */
+.overlay{
+  position:fixed;inset:0;z-index:100;
+  background:rgba(8,6,20,.72);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+.overlay.show{opacity:1;pointer-events:auto}
+.modal{
+  width:min(92vw,420px);max-height:82dvh;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#20243f,#191d33);
+  border:2px solid rgba(255,215,0,.6);border-radius:20px;
+  box-shadow:0 0 40px rgba(255,215,0,.25),0 18px 40px rgba(0,0,0,.5);
+  transform:scale(.6);transition:transform .34s cubic-bezier(.34,1.56,.64,1);
+  overflow:hidden;
+}
+.overlay.show .modal{transform:scale(1)}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px 12px;border-bottom:1px solid rgba(255,215,0,.22);
+}
+.modal-head h2{color:var(--gold);font-size:19px;letter-spacing:3px}
+.modal-head .count{color:#9aa3c0;font-size:13px;margin-top:4px}
+.modal-close{
+  width:32px;height:32px;border:none;border-radius:50%;cursor:pointer;flex:none;
+  background:rgba(255,255,255,.08);color:#dfe4ff;font-size:18px;line-height:1;
+  transition:all .15s;
+}
+.modal-close:hover{background:rgba(255,107,107,.35);color:#fff}
+
+/* 奖品列表 */
+.p-list{
+  flex:1 1 auto;overflow-y:auto;padding:12px 14px;min-height:120px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.p-empty{color:#7c86a6;text-align:center;padding:34px 0;font-size:14px;letter-spacing:2px}
+.p-card{
+  display:flex;align-items:center;gap:12px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:10px 12px;
+  transition:all .15s ease;animation:cardIn .3s ease both;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.p-card:hover{border-color:rgba(255,215,0,.5);background:rgba(255,215,0,.07)}
+.p-dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 8px currentColor}
+.p-info{flex:1;min-width:0;display:flex;flex-direction:column}
+.p-name{color:#fff;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-weight{color:#9aa3c0;font-size:12px;margin-top:2px}
+.mini-btn{
+  flex:none;padding:6px 14px;border:none;border-radius:16px;cursor:pointer;
+  font-family:inherit;font-size:13px;transition:all .15s;
+}
+.mini-btn.edit{background:rgba(78,205,196,.18);color:#4ECDC4;border:1px solid rgba(78,205,196,.4)}
+.mini-btn.edit:hover{background:rgba(78,205,196,.32)}
+.mini-btn.del{background:rgba(255,107,107,.15);color:#FF6B6B;border:1px solid rgba(255,107,107,.4)}
+.mini-btn.del:hover{background:rgba(255,107,107,.3)}
+.mini-btn:active{transform:scale(.92)}
+
+/* 添加 / 编辑表单 */
+.modal-form{padding:14px 16px 18px;border-top:1px solid rgba(255,215,0,.22);background:rgba(0,0,0,.18)}
+.form-row{display:flex;gap:10px;margin-bottom:10px}
+.form-row input[type=text]{
+  flex:1;min-width:0;padding:10px 12px;border-radius:10px;outline:none;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
+  color:#fff;font-family:inherit;font-size:14px;transition:border-color .15s;
+}
+.form-row input[type=text]:focus{border-color:var(--gold)}
+.form-row input[type=text]::placeholder{color:#6c7698}
+.form-row input[type=color]{
+  width:46px;height:44px;padding:2px;border-radius:10px;cursor:pointer;flex:none;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
+}
+.form-row input[type=number]{
+  width:74px;padding:10px;border-radius:10px;outline:none;text-align:center;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
+  color:#fff;font-family:inherit;font-size:14px;
+}
+.form-row .w-label{align-self:center;color:#9aa3c0;font-size:13px;flex:none}
+.form-actions{display:flex;gap:10px}
+.add-btn{
+  flex:1;padding:11px;border:none;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:15px;font-weight:800;letter-spacing:2px;color:#7a1f00;
+  background:linear-gradient(180deg,#ffe066,#ffc107);
+  box-shadow:0 4px 0 #b8860b;
+  transition:all .15s;
+}
+.add-btn:hover{filter:brightness(1.06)}
+.add-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #b8860b}
+.add-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:0 4px 0 #b8860b}
+.cancel-btn{
+  padding:11px 18px;border:1px solid rgba(255,255,255,.2);border-radius:12px;cursor:pointer;
+  background:rgba(255,255,255,.06);color:#cfd5f0;font-family:inherit;font-size:14px;
+  transition:all .15s;
+}
+.cancel-btn:hover{background:rgba(255,255,255,.12)}
+
+/* ================= 结果弹窗 ================= */
+.result-overlay{
+  position:fixed;inset:0;z-index:110;
+  background:rgba(8,6,20,.7);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+.result-overlay.show{opacity:1;pointer-events:auto}
+.result-modal{
+  width:min(86vw,330px);text-align:center;padding:30px 24px 26px;border-radius:22px;
+  background:linear-gradient(180deg,#fffdf4,#fff3d6);border:3px solid var(--gold);
+  box-shadow:0 0 36px rgba(255,215,0,.55),0 14px 32px rgba(0,0,0,.45);
+  transform:scale(.5);transition:transform .38s cubic-bezier(.34,1.56,.64,1);
+}
+.result-overlay.show .result-modal{transform:scale(1)}
+.result-modal .r-icon{font-size:54px;line-height:1.2}
+.result-modal .r-label{font-size:15px;color:#a5751c;letter-spacing:4px;margin:12px 0 6px}
+.result-modal .r-name{font-size:26px;color:#d4380d;font-weight:900;letter-spacing:3px;margin-bottom:20px;word-break:break-all}
+.result-modal .ok-btn{
+  padding:11px 48px;border:none;border-radius:30px;cursor:pointer;
+  font-family:inherit;font-size:16px;font-weight:700;letter-spacing:3px;color:#fff;
+  background:linear-gradient(180deg,#ff9a3c,#ff6b35);
+  box-shadow:0 4px 0 #c94f1f;transition:transform .15s;
+}
+.result-modal .ok-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #c94f1f}
+
+/* 粒子画布（彩带 / 点击火花共用） */
+#fx{position:fixed;inset:0;z-index:115;pointer-events:none}
+
+/* ================= 底部半透明购买提示栏 ================= */
+.buy-bar{
+  position:fixed;left:0;right:0;bottom:0;z-index:90;
+  display:flex;align-items:center;justify-content:center;gap:14px;
+  padding:9px 14px;min-height:38px;
+  background:rgba(255,215,0,.10);backdrop-filter:blur(8px);
+  border-top:1px solid rgba(255,215,0,.35);
+  font-size:13px;color:#f5e9c4;letter-spacing:1px;
+}
+.buy-bar a{color:var(--gold);font-weight:700;text-decoration:none;border-bottom:1px dashed var(--gold)}
+.buy-bar a:hover{color:#ffe98a}
+.buy-close{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;
+  background:rgba(255,255,255,.12);color:#dfe4ff;font-size:13px;line-height:1;
+}
+</style>
+</head>
+<body>
+
+<!-- 背景漂浮金光 -->
+<div id="bgSparks"></div>
+
+<div class="page">
+  <h1 class="title">✨ 幸运大转盘 ✨</h1>
+
+  <div class="wheel-wrap" id="wrap">
+    <div class="pointer" id="pointer"></div>
+    <div class="pointer-base"></div>
+    <div class="wheel" id="wheel"></div>
+    <button class="center-btn" id="centerBtn">开始<br>抽奖</button>
+  </div>
+
+  <button class="manage-btn" id="manageBtn">＋ 添加 / 查看奖品</button>
+  <div class="hint-note" id="hintNote"></div>
+</div>
+
+<!-- 奖品管理弹窗 -->
+<div class="overlay" id="mgOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2>奖品管理</h2>
+        <div class="count" id="prizeCount">共 6 个 / 最多 20 个</div>
+      </div>
+      <button class="modal-close" id="mgClose">✕</button>
+    </div>
+    <div class="p-list" id="pList"></div>
+    <div class="modal-form">
+      <div class="form-row">
+        <input type="text" id="pName" placeholder="奖品名称（如：一等奖）" maxlength="12">
+        <input type="color" id="pColor" value="#FF6B6B" title="选择颜色">
+      </div>
+      <div class="form-row">
+        <span class="w-label">概率权重</span>
+        <input type="number" id="pWeight" value="1" min="0" max="100" step="1">
+        <span class="w-label" style="flex:1;font-size:12px">数值越大越容易中（0 = 永远不中）</span>
+      </div>
+      <div class="form-actions">
+        <button class="add-btn" id="addBtn">✔ 确定添加</button>
+        <button class="cancel-btn" id="cancelBtn" style="display:none">取消编辑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 中奖结果弹窗 -->
+<div class="result-overlay" id="rsOverlay">
+  <div class="result-modal">
+    <div class="r-icon" id="rIcon">🎉</div>
+    <div class="r-label" id="rLabel">恭喜你抽中</div>
+    <div class="r-name" id="rName">一等奖</div>
+    <button class="ok-btn" id="rsOk">确定</button>
+  </div>
+</div>
+
+<!-- 底部购买提示栏 -->
+<div class="buy-bar" id="buyBar">
+  <span>🎯 想要定制专属大转盘？</span>
+  <a href="https://www.wuwutech.top" target="_blank" rel="noopener">立即购买 →</a>
+  <button class="buy-close" id="buyClose">✕</button>
+</div>
+
+<canvas id="fx"></canvas>
+
+<script>
+'use strict';
+/* ============================ 数据 ============================ */
+const MAX_PRIZES = 20, MIN_PRIZES = 2;
+const PALETTE = ['#FF6B6B','#FFE66D','#4ECDC4','#A66CFF','#6BCB77','#FF9F43'];
+
+// 默认 6 个奖品；每项字段：name 名称 / color 颜色 / weight 概率权重
+let prizes = [
+  { name:'一等奖',   color:PALETTE[0], weight:1 },
+  { name:'二等奖',   color:PALETTE[1], weight:2 },
+  { name:'三等奖',   color:PALETTE[2], weight:3 },
+  { name:'谢谢参与', color:PALETTE[3], weight:4 },
+  { name:'再来一次', color:PALETTE[4], weight:2 },
+  { name:'神秘大奖', color:PALETTE[5], weight:1 },
+];
+
+/* ============================ 元素 ============================ */
+const wrap     = document.getElementById('wrap');
+const wheel    = document.getElementById('wheel');
+const pointer  = document.getElementById('pointer');
+const centerBtn= document.getElementById('centerBtn');
+const mgBtn    = document.getElementById('manageBtn');
+const hintNote = document.getElementById('hintNote');
+const mgOverlay= document.getElementById('mgOverlay');
+const pList    = document.getElementById('pList');
+const prizeCount=document.getElementById('prizeCount');
+const pName    = document.getElementById('pName');
+const pColor   = document.getElementById('pColor');
+const pWeight  = document.getElementById('pWeight');
+const addBtn   = document.getElementById('addBtn');
+const cancelBtn= document.getElementById('cancelBtn');
+const rsOverlay= document.getElementById('rsOverlay');
+const fx       = document.getElementById('fx');
+const fctx     = fx.getContext('2d');
+
+let editingIdx = -1;   // -1 = 添加模式，>=0 = 编辑第 i 个
+
+/* ============================ 背景金光 ============================ */
+(function buildSparks(){
+  const box = document.getElementById('bgSparks');
+  for (let i = 0; i < 22; i++){
+    const s = document.createElement('div');
+    s.className = 'bg-spark';
+    const size = 3 + Math.random() * 6;
+    s.style.width = s.style.height = size + 'px';
+    s.style.left = Math.random() * 100 + 'vw';
+    s.style.top = (40 + Math.random() * 80) + 'vh';
+    s.style.animationDuration = (7 + Math.random() * 9) + 's';
+    s.style.animationDelay = (-Math.random() * 14) + 's';
+    s.style.opacity = .2 + Math.random() * .5;
+    box.appendChild(s);
+  }
+})();
+
+/* ============================ 绘制转盘 ============================ */
+const NS = 'http://www.w3.org/2000/svg';
+const sns = t => document.createElementNS(NS, t);
+
+function buildSvg(){
+  const n = prizes.length;
+  const svg = sns('svg');
+  svg.setAttribute('viewBox', '0 0 500 500');
+  const C = 250, R = 246;               // 外圈半径（500 - 8px 边框内缘）
+  const SEG = 360 / n;                  // 关键：角度 = 360 ÷ 数量，动态计算
+
+  // 中心金色装饰环渐变
+  const defs = sns('defs');
+  const grad = sns('radialGradient');
+  grad.setAttribute('id','goldGrad');
+  grad.setAttribute('cx','38%'); grad.setAttribute('cy','30%');
+  [['0%','#fff2b0'],['55%','#ffd700'],['100%','#d9a300']].forEach(([o,c])=>{
+    const st = sns('stop'); st.setAttribute('offset',o); st.setAttribute('stop-color',c);
+    grad.appendChild(st);
+  });
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  const toXY = a => [C + R * Math.sin(a * Math.PI / 180), C - R * Math.cos(a * Math.PI / 180)];
+  const half = SEG / 2;
+
+  if (n === 1){
+    // 单个奖品：整圆
+    const c = sns('circle');
+    c.setAttribute('cx',C);c.setAttribute('cy',C);c.setAttribute('r',R);
+    c.setAttribute('fill',prizes[0].color);
+    svg.appendChild(c);
+  } else {
+    for (let i = 0; i < n; i++){
+      const a0 = i * SEG - half, a1 = i * SEG + half;
+      const [x0,y0] = toXY(a0), [x1,y1] = toXY(a1);
+      const p = sns('path');
+      p.setAttribute('d', `M${C} ${C} L${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} Z`);
+      p.setAttribute('fill', prizes[i].color);
+      p.setAttribute('stroke','rgba(255,255,255,.5)');
+      p.setAttribute('stroke-width','1.5');
+      svg.appendChild(p);
+    }
+  }
+
+  // 放射文字（字号随名称长度与扇形角度自动缩小）
+  for (let i = 0; i < n; i++){
+    const g = sns('g');
+    g.setAttribute('transform', `rotate(${i * SEG} ${C} ${C})`);
+
+    const len = prizes[i].name.length;
+    const fs = Math.max(7, Math.min(17, R * 0.42 / Math.max(3, len), SEG * 0.85));
+    const txt = sns('text');
+    txt.setAttribute('x', C);
+    txt.setAttribute('y', C - R * 0.42);
+    txt.setAttribute('text-anchor','middle');
+    txt.setAttribute('font-size', fs);
+    txt.setAttribute('font-weight','900');
+    txt.setAttribute('letter-spacing','1');
+    txt.setAttribute('fill','#fff');
+    txt.setAttribute('stroke','rgba(20,15,5,.55)');
+    txt.setAttribute('stroke-width','1');
+    txt.setAttribute('paint-order','stroke');
+    txt.textContent = prizes[i].name;
+    g.appendChild(txt);
+    svg.appendChild(g);
+  }
+
+  // 中心金色圆环（位于 HTML 中心按钮下层）
+  const ring = sns('circle');
+  ring.setAttribute('cx',C);ring.setAttribute('cy',C);ring.setAttribute('r',70);
+  ring.setAttribute('fill','url(#goldGrad)');
+  ring.setAttribute('stroke','#fff');ring.setAttribute('stroke-width','4');
+  svg.appendChild(ring);
+
+  return svg;
+}
+
+/* 重建转盘：交叉淡入淡出 + 轻微脉冲，避免突变 */
+function rebuildWheel(){
+  const oldSvg = wheel.querySelector('svg');
+  const newSvg = buildSvg();
+  if (!oldSvg){ wheel.appendChild(newSvg); return; }
+
+  newSvg.style.opacity = '0';
+  newSvg.style.transition = 'opacity .28s ease';
+  oldSvg.style.transition = 'opacity .28s ease';
+  wheel.appendChild(newSvg);
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    newSvg.style.opacity = '1';
+    oldSvg.style.opacity = '0';
+    wrap.classList.remove('pulse');
+    void wrap.offsetWidth;           // 重启动画
+    wrap.classList.add('pulse');
+    setTimeout(() => oldSvg.remove(), 320);
+  }));
+}
+
+/* 边缘灯泡：16 颗均匀分布，随转盘转动 */
+function buildBulbs(){
+  wheel.querySelectorAll('.bulb').forEach(b => b.remove());
+  const W = wrap.clientWidth, C = W / 2, rB = W / 2 - 15;
+  for (let k = 0; k < 16; k++){
+    const a = k * 22.5 * Math.PI / 180;
+    const b = document.createElement('div');
+    b.className = 'bulb';
+    b.style.left = (C + rB * Math.sin(a) - 6) + 'px';
+    b.style.top  = (C - rB * Math.cos(a) - 6) + 'px';
+    b.style.animationDelay = (k % 2 ? .58 : 0) + 's';
+    wheel.appendChild(b);
+  }
+}
+
+/* ============================ 概率抽取 ============================ */
+function pickIndex(){
+  const total = prizes.reduce((s,p) => s + p.weight, 0);
+  if (total <= 0){ // 全为 0 权重时退化为等概率
+    return Math.floor(Math.random() * prizes.length);
+  }
+  let r = Math.random() * total;
+  for (let i = 0; i < prizes.length; i++){
+    r -= prizes[i].weight;
+    if (r < 0) return i;
+  }
+  return prizes.length - 1;
+}
+
+/* ============================ 旋转逻辑 ============================ */
+let busy = false, ended = false, fallbackTimer = null;
+
+function readAngle(){
+  const t = getComputedStyle(wheel).transform;
+  if (!t || t === 'none') return 0;
+  if (window.DOMMatrixReadOnly){
+    try{ const m = new DOMMatrixReadOnly(t); return Math.atan2(m.b, m.a) * 180 / Math.PI; }catch(e){}
+  }
+  const m = t.match(/matrix\(([^)]+)\)/);
+  if (m){ const p = m[1].split(',').map(parseFloat); return Math.atan2(p[1], p[0]) * 180 / Math.PI; }
+  return 0;
+}
+const norm360 = a => ((a % 360) + 360) % 360;
+
+function spin(){
+  if (busy || prizes.length < MIN_PRIZES) return;
+  busy = true; ended = false;
+  updateStates();
+  ensureAudio();
+
+  const idx = pickIndex();           // 结果先定，旋转只是表演
+  const SEG = 360 / prizes.length;
+  const cur = norm360(readAngle());  // 从当前实际角度出发
+  const need = ((360 - ((cur + idx * SEG) % 360)) % 360 + 360) % 360;
+  const rounds = 5 + Math.floor(Math.random() * 4);   // 5~8 圈
+  const next = cur + rounds * 360 + need;             // 精确对准 idx 扇形中线
+
+  sound.tick();
+  wheel._winIndex = idx;
+  wheel.classList.add('spinning');
+  leverageSpark(); // 点击中心按钮的粒子反馈
+  wheel.style.transform = 'rotate(' + next + 'deg)';
+  fallbackTimer = setTimeout(finish, 5250); // transitionend 兜底
+}
+
+function finish(){
+  if (ended) return;
+  ended = true;
+  clearTimeout(fallbackTimer);
+  wheel.classList.remove('spinning');
+  pointer.classList.add('swing');
+  setTimeout(() => pointer.classList.remove('swing'), 980);
+  // 注意：busy 保持 true，直到用户关闭结果弹窗，防止重复抽奖
+  updateStates();
+
+  const p = prizes[wheel._winIndex];
+  const isThanks = p.name.indexOf('谢谢') > -1;
+  setTimeout(() => {
+    document.getElementById('rIcon').textContent  = isThanks ? '😢' : '🎉';
+    document.getElementById('rLabel').textContent = isThanks ? '再接再厉' : '恭喜你抽中';
+    document.getElementById('rName').textContent  = p.name;
+    rsOverlay.classList.add('show');
+    if (isThanks){ sound.lose(); }
+    else { sound.win(); confettiRain(); }
+  }, 500); // 停止后 0.5s 弹窗
+}
+
+function closeResult(){
+  if (!rsOverlay.classList.contains('show')) return; // 旋转中按 Esc 不误触
+  rsOverlay.classList.remove('show');
+  busy = false;
+  updateStates();
+}
+
+wheel.addEventListener('transitionend', e => { if (e.propertyName === 'transform') finish(); });
+
+/* ============================ 音效（WebAudio 无外部资源） ============================ */
+let actx = null;
+function ensureAudio(){
+  try{ if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); }
+  catch(e){ actx = null; }
+}
+function tone(f, t0, dur, type, vol){
+  if (!actx || actx.state === 'suspended') return;
+  try{
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = f;
+    const t = actx.currentTime + t0;
+    g.gain.setValueAtTime(.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + .02);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + dur + .05);
+  }catch(e){}
+}
+const sound = {
+  tick(){ tone(520,0,.07,'square',.07); tone(760,.05,.06,'square',.05); },
+  win(){ tone(523.25,0,.16,'triangle',.2); tone(659.25,.12,.16,'triangle',.2); tone(783.99,.24,.34,'triangle',.22); },
+  lose(){ tone(400,0,.2,'sine',.14); tone(300,.16,.26,'sine',.14); }
+};
+
+/* ============================ 粒子引擎（点击火花 / 彩带共用） ============================ */
+let parts = [], partsRunning = false;
+function spawnPart(p){ parts.push(p); if (!partsRunning){ partsRunning = true; tickParts(); } }
+function tickParts(){
+  fctx.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter(p => {
+    p.x += p.vx; p.y += p.vy; p.vy += p.g; p.rot += p.vr; p.life--;
+    if (p.life <= 0 || p.y > fx.height + 30) return false;
+    fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.rot);
+    fctx.globalAlpha = Math.min(1, p.life / 40);
+    fctx.fillStyle = p.c;
+    fctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+    fctx.restore();
+    return true;
+  });
+  if (parts.length){ requestAnimationFrame(tickParts); }
+  else { partsRunning = false; fctx.clearRect(0, 0, fx.width, fx.height); }
+}
+function sizeFx(){ fx.width = innerWidth; fx.height = innerHeight; }
+window.addEventListener('resize', sizeFx);
+
+/* 点击 / 触摸处的金色粒子爆发 */
+function leverageSpark(){
+  const r = centerBtn.getBoundingClientRect();
+  sparkBurst(r.left + r.width / 2, r.top + r.height / 2, 16);
+}
+function sparkBurst(cx, cy, count){
+  sizeFx();
+  for (let i = 0; i < count; i++){
+    const a = Math.random() * Math.PI * 2;
+    const v = 2 + Math.random() * 5;
+    spawnPart({
+      x: cx, y: cy,
+      vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2,
+      w: 4 + Math.random() * 5, h: 4 + Math.random() * 5,
+      rot: Math.random() * Math.PI, vr: -.2 + Math.random() * .4,
+      g: .18, life: 38 + Math.random() * 25,
+      c: ['#FFD700','#fff8d0','#ff9a3c','#ffe066'][i % 4]
+    });
+  }
+}
+/* 中奖彩带 */
+function confettiRain(){
+  sizeFx();
+  const colors = ['#FFD700','#FF6B6B','#FFE66D','#4ECDC4','#A66CFF','#ffffff','#ff9a3c'];
+  for (let i = 0; i < 160; i++){
+    spawnPart({
+      x: Math.random() * fx.width,
+      y: -30 - Math.random() * fx.height * .5,
+      vx: -1.6 + Math.random() * 3.2,
+      vy: 2.2 + Math.random() * 3.6,
+      w: 6 + Math.random() * 7, h: 9 + Math.random() * 9,
+      rot: Math.random() * Math.PI, vr: -.16 + Math.random() * .32,
+      g: .022, life: 420,
+      c: colors[i % colors.length]
+    });
+  }
+}
+
+/* ============================ 拖拽旋转（鼠标 + 触摸，pointer 事件统一处理） ============================ */
+let dragging = false, dragAngle = 0, lastA = 0, inertiaV = 0, rafId = null;
+
+function atanOf(e){
+  const r = wrap.getBoundingClientRect();
+  return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+}
+function applyDrag(a){
+  wheel.style.transform = 'rotate(' + a + 'deg)';
+}
+
+wheel.addEventListener('pointerdown', e => {
+  if (busy) return;
+  if (e.target.closest('.center-btn')) return;
+  ensureAudio();
+  wheel.setPointerCapture(e.pointerId);
+  dragging = true;
+  cancelAnimationFrame(rafId);
+  wheel.style.transition = 'none';            // 拖拽时关闭旋转过渡
+  wheel.classList.add('dragging');
+  dragAngle = readAngle() || 0;
+  lastA = atanOf(e);
+  inertiaV = 0;
+  sparkBurst(e.clientX, e.clientY, 9);        // 点击火花（可选交互）
+  e.preventDefault();
+});
+wheel.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const a = atanOf(e);
+  let d = a - lastA;
+  while (d > Math.PI)  d -= Math.PI * 2;      // 归一化到 (-π, π]
+  while (d < -Math.PI) d += Math.PI * 2;
+  dragAngle += d * 180 / Math.PI;
+  inertiaV = d * 180 / Math.PI * 60;   // 近似 60fps 下的角速度（度/秒）
+  applyDrag(dragAngle);
+  lastA = a;
+});
+function endDrag(){
+  if (!dragging) return;
+  dragging = false;
+  wheel.classList.remove('dragging');
+  // 惯性衰减
+  const step = () => {
+    dragAngle += inertiaV / 60;
+    inertiaV *= .95;
+    applyDrag(dragAngle);
+    if (Math.abs(inertiaV) > 8 && !dragging){
+      rafId = requestAnimationFrame(step);
+    } else {
+      wheel.style.transition = '';            // 恢复 CSS 过渡（供抽奖使用）
+    }
+  };
+  rafId = requestAnimationFrame(step);
+}
+wheel.addEventListener('pointerup', endDrag);
+wheel.addEventListener('pointercancel', endDrag);
+
+/* ============================ 状态联动 ============================ */
+function updateStates(){
+  const n = prizes.length;
+  centerBtn.disabled = busy || n < MIN_PRIZES;
+  mgBtn.disabled = busy;
+  hintNote.textContent = n < MIN_PRIZES
+    ? `至少需要 ${MIN_PRIZES} 个奖品才能开始抽奖`
+    : '';
+  prizeCount.textContent = `共 ${n} 个 / 最多 ${MAX_PRIZES} 个`;
+  addBtn.disabled = n >= MAX_PRIZES;
+}
+
+/* ============================ 奖品管理 ============================ */
+function renderList(){
+  pList.innerHTML = '';
+  if (!prizes.length){
+    const empty = document.createElement('div');
+    empty.className = 'p-empty';
+    empty.textContent = '暂无奖品，请在下方添加';
+    pList.appendChild(empty);
+    return;
+  }
+  prizes.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'p-card';
+    card.style.animationDelay = (i * 40) + 'ms';
+
+    const dot = document.createElement('span');
+    dot.className = 'p-dot';
+    dot.style.background = p.color;
+    dot.style.color = p.color;
+
+    const info = document.createElement('div');
+    info.className = 'p-info';
+    const nm = document.createElement('span');
+    nm.className = 'p-name';
+    nm.textContent = p.name;
+    const wt = document.createElement('span');
+    wt.className = 'p-weight';
+    wt.textContent = '概率 ×' + p.weight;
+    info.appendChild(nm); info.appendChild(wt);
+
+    const edit = document.createElement('button');
+    edit.className = 'mini-btn edit';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', () => startEdit(i));
+
+    const del = document.createElement('button');
+    del.className = 'mini-btn del';
+    del.textContent = '删除';
+    del.addEventListener('click', () => {
+      prizes.splice(i, 1);
+      if (editingIdx === i) resetForm();
+      else if (editingIdx > i) editingIdx--;
+      updateStates(); renderList(); rebuildWheel();
+    });
+
+    card.appendChild(dot); card.appendChild(info);
+    card.appendChild(edit); card.appendChild(del);
+    pList.appendChild(card);
+  });
+}
+
+function resetForm(){
+  editingIdx = -1;
+  pName.value = '';
+  pColor.value = PALETTE[prizes.length % PALETTE.length];
+  pWeight.value = 1;
+  addBtn.textContent = '✔ 确定添加';
+  cancelBtn.style.display = 'none';
+}
+function startEdit(i){
+  editingIdx = i;
+  pName.value = prizes[i].name;
+  pColor.value = prizes[i].color;
+  pWeight.value = prizes[i].weight;
+  addBtn.textContent = '💾 保存修改';
+  cancelBtn.style.display = 'block';
+  pName.focus();
+}
+function submitForm(){
+  const name = pName.value.trim();
+  if (!name){ pName.focus(); pName.style.borderColor = '#FF6B6B'; setTimeout(()=>pName.style.borderColor='',1200); return; }
+  const color = pColor.value;
+  const weight = Math.max(0, Math.min(100, parseInt(pWeight.value, 10) || 0));
+
+  if (editingIdx >= 0){
+    prizes[editingIdx] = { name, color, weight };
+  } else {
+    if (prizes.length >= MAX_PRIZES) return;
+    prizes.push({ name, color, weight });
+  }
+  resetForm();
+  updateStates(); renderList(); rebuildWheel(); // 立即重新均分
+}
+
+/* ============================ 弹窗开关 ============================ */
+function openManage(){
+  if (busy) return;
+  resetForm();
+  renderList();
+  updateStates();
+  mgOverlay.classList.add('show');
+}
+function closeManage(){ mgOverlay.classList.remove('show'); }
+
+mgBtn.addEventListener('click', openManage);
+document.getElementById('mgClose').addEventListener('click', closeManage);
+mgOverlay.addEventListener('click', e => { if (e.target === mgOverlay) closeManage(); });
+addBtn.addEventListener('click', submitForm);
+cancelBtn.addEventListener('click', resetForm);
+pName.addEventListener('keydown', e => { if (e.key === 'Enter') submitForm(); });
+
+document.getElementById('rsOk').addEventListener('click', closeResult);
+document.getElementById('buyClose').addEventListener('click', () => {
+  document.getElementById('buyBar').style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ closeManage(); closeResult(); }
+});
+
+/* ============================ 初始化 ============================ */
+centerBtn.addEventListener('click', spin);
+sizeFx();
+buildBulbs();
+rebuildWheel();
+updateStates();
+window.addEventListener('resize', buildBulbs);
+</script>
+</body>
+</html>
