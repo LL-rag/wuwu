@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>生日祝福 H5</title>
+
+<!-- ============ 全局字体：悠然体（未提供字体文件时先用 @font-face 占位 + 系统字体降级） ============ -->
+<style>
+/* 字体文件路径占位：把 youranti.ttf 换成实际文件路径即可（支持 .ttf/.otf/.woff2，可增删 src 行） */
+@font-face{
+  font-family:"YouRan";
+  src:local("悠然体"), local("YouRanTi"), local("HanYiYouRanTi"),
+      url("/fonts/youranti.ttf") format("truetype");
+  font-display:swap;
+}
+:root{
+  --pink:#ff5d8f;
+  --pink-deep:#e8447a;
+  --pink-soft:#ffd6e0;
+  --font:"YouRan","PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font);
+  background:#fff;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none;
+}
+.page{
+  position:fixed;inset:0;
+  transition:opacity .55s ease, visibility .55s ease;
+}
+.hidden{opacity:0;visibility:hidden;pointer-events:none}
+
+/* ==========================================================
+   第一阶段：输入页
+   ========================================================== */
+#page1{
+  background:
+    radial-gradient(120% 90% at 50% 0%, #fff7f9 0%, #ffeef3 45%, #ffe9ef 100%);
+  overflow:hidden;
+}
+
+/* ---- 随机铺满的生日元素 ---- */
+.bg-item{
+  position:absolute;z-index:1;opacity:.92;line-height:1;
+  filter:drop-shadow(0 2px 3px rgba(233,116,161,.25));
+  animation:itemFloat ease-in-out infinite;
+}
+@keyframes itemFloat{
+  0%,100%{transform:translateY(0) rotate(calc(var(--rot, 0deg) - 4deg))}
+  50%{transform:translateY(-11px) rotate(calc(var(--rot, 0deg) + 4deg))}
+}
+
+/* ---- 小星星飘落 ---- */
+.star{
+  position:absolute;top:-8vh;z-index:2;color:#ffb6c9;line-height:1;
+  text-shadow:0 0 8px rgba(255,170,200,.9),0 0 16px rgba(255,255,255,.8);
+  animation:starFall linear infinite;
+}
+@keyframes starFall{
+  0%{transform:translateY(-6vh) translateX(0);opacity:0}
+  8%{opacity:1}
+  25%{transform:translateY(28vh) translateX(9px)}
+  50%{transform:translateY(55vh) translateX(-7px)}
+  75%{transform:translateY(82vh) translateX(10px)}
+  100%{transform:translateY(110vh) translateX(-3px);opacity:.2}
+}
+
+/* ---- 偶发流星 ---- */
+.meteor{
+  position:absolute;z-index:3;width:150px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.95) 55%, rgba(255,215,140,.0));
+  box-shadow:0 0 10px 2px rgba(255,255,255,.7);
+  pointer-events:none;
+}
+.meteor::after{ /* 头部光点 */
+  content:"";position:absolute;right:-2px;top:50%;width:7px;height:7px;
+  transform:translateY(-50%);border-radius:50%;
+  background:#fff;box-shadow:0 0 14px 5px rgba(255,255,255,.85);
+}
+@keyframes meteorFly{
+  0%{transform:translate(0,0) rotate(var(--deg, 32deg));opacity:1}
+  70%{opacity:1}
+  100%{transform:translate(-76vw,58vh) rotate(var(--deg, 32deg));opacity:0}
+}
+
+/* ---- 中央输入卡片 ---- */
+.card{
+  position:absolute;left:50%;top:46%;z-index:10;
+  width:min(88vw,400px);padding:34px 26px 30px;border-radius:24px;
+  transform:translate(-50%,-50%);
+  background:#fff;
+  box-shadow:0 14px 40px rgba(233,116,161,.24),0 4px 12px rgba(233,116,161,.12);
+  text-align:center;
+}
+.card .c-title{font-size:clamp(21px,6vw,27px);color:var(--pink);letter-spacing:3px;margin-bottom:6px;font-weight:700}
+.card .c-sub{font-size:13px;color:#e89ab5;letter-spacing:2px;margin-bottom:20px}
+.card input{
+  width:100%;padding:13px 16px;border:2px solid #ffd0de;border-radius:14px;outline:none;
+  font-family:inherit;font-size:clamp(16px,4.6vw,18px);text-align:center;color:#5c3a48;
+  background:#fff8fa;letter-spacing:2px;
+  transition:border-color .2s, box-shadow .2s;
+}
+.card input:focus{border-color:var(--pink);box-shadow:0 0 0 4px rgba(255,93,143,.12)}
+.card input::placeholder{color:#e8a9bf}
+.card .c-btn{
+  margin-top:20px;padding:13px 0;width:100%;border:none;border-radius:999px;cursor:pointer;
+  font-family:inherit;font-size:clamp(17px,4.8vw,19px);font-weight:700;letter-spacing:6px;color:#fff;
+  background:linear-gradient(135deg,#ff87ab,#ff5d8f 55%,#e8447a);
+  box-shadow:0 6px 16px rgba(232,68,122,.45);
+  transition:transform .15s ease, box-shadow .15s ease, filter .15s;
+}
+.card .c-btn:hover{filter:brightness(1.06);transform:translateY(-2px)}
+.card .c-btn:active{transform:translateY(2px) scale(.98);box-shadow:0 3px 10px rgba(232,68,122,.4)}
+.card .c-hint{min-height:20px;margin-top:10px;font-size:13px;color:#e8447a;opacity:0;transition:opacity .3s}
+.card .c-hint.show{opacity:1}
+.card.shake{animation:cardShake .45s ease}
+@keyframes cardShake{
+  0%,100%{transform:translate(-50%,-50%) translateX(0)}
+  20%{transform:translate(-50%,-50%) translateX(-10px)}
+  40%{transform:translate(-50%,-50%) translateX(9px)}
+  60%{transform:translate(-50%,-50%) translateX(-6px)}
+  80%{transform:translate(-50%,-50%) translateX(4px)}
+}
+
+/* ==========================================================
+   第二阶段：祝福页
+   ========================================================== */
+#page2{background:#fff;overflow:hidden}
+#pc{position:absolute;inset:0;z-index:1}
+
+/* ---- 弹字 ---- */
+.pop{
+  position:absolute;z-index:5;pointer-events:none;white-space:nowrap;
+  color:var(--pink);font-weight:700;letter-spacing:2px;
+  opacity:0;will-change:transform,opacity;
+  text-shadow:0 2px 14px rgba(255,93,143,.28);
+  transition:opacity .75s ease, transform 1s cubic-bezier(.22,1,.36,1);
+  font-size:clamp(22px,6vw,32px);
+}
+.pop.long{font-size:clamp(16px,4.4vw,24px)}   /* 长句自动略小但保持清晰 */
+.pop.up{top:9%;left:50%;text-align:center;transform:translate(-50%,-70px)}
+.pop.up.in{opacity:1;transform:translate(-50%,0)}
+.pop.down{bottom:9%;left:50%;text-align:center;transform:translate(-50%,70px)}
+.pop.down.in{opacity:1;transform:translate(-50%,0)}
+.pop.left{top:31%;left:5%;text-align:left;transform:translateX(-90px)}
+.pop.left.in{opacity:1;transform:translateX(0)}
+.pop.right{top:49%;right:5%;text-align:right;transform:translateX(90px)}
+.pop.right.in{opacity:1;transform:translateX(0)}
+.pop.out{opacity:0}
+
+/* ---- 再来一遍按钮 ---- */
+#replayBtn{
+  position:absolute;left:50%;top:74%;z-index:6;
+  transform:translate(-50%,-50%) scale(.4);
+  padding:14px 46px;border:none;border-radius:999px;cursor:pointer;
+  font-family:inherit;font-size:clamp(17px,4.8vw,19px);font-weight:700;letter-spacing:4px;color:#fff;
+  background:linear-gradient(135deg,#ff87ab,#ff5d8f 55%,#e8447a);
+  box-shadow:0 8px 20px rgba(232,68,122,.4);
+  opacity:0;pointer-events:none;
+  transition:transform .45s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
+}
+#replayBtn.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+#replayBtn:active{transform:translate(-50%,-50%) scale(.94)}
+</style>
+</head>
+<body>
+
+<!-- ================= 第一阶段：输入页 ================= -->
+<div class="page" id="page1">
+  <div id="bgItems"></div>
+  <div id="starsWrap"></div>
+  <div id="meteorWrap"></div>
+
+  <div class="card" id="card">
+    <div class="c-title">🎂 生日快乐呀</div>
+    <div class="c-sub">把祝福送给谁？</div>
+    <input id="nameInput" type="text" placeholder="请输入名字" maxlength="12">
+    <button class="c-btn" id="confirmBtn">确 定</button>
+    <div class="c-hint" id="cHint">记得先输入名字哦～</div>
+  </div>
+</div>
+
+<!-- ================= 第二阶段：祝福页 ================= -->
+<div class="page hidden" id="page2">
+  <canvas id="pc"></canvas>
+  <div id="popWrap"></div>
+  <button id="replayBtn">🎂 再来一遍</button>
+</div>
+
+<!-- 背景音乐（按需求路径引用，进入第二阶段 1 秒后播放） -->
+<audio id="bgm" src="/audio/sr1.mp3" loop preload="auto"></audio>
+
+<script>
+'use strict';
+/* ============================ 元素 ============================ */
+const page1 = document.getElementById('page1');
+const page2 = document.getElementById('page2');
+const card = document.getElementById('card');
+const nameInput = document.getElementById('nameInput');
+const cHint = document.getElementById('cHint');
+const bgm = document.getElementById('bgm');
+const popWrap = document.getElementById('popWrap');
+const replayBtn = document.getElementById('replayBtn');
+const cv = document.getElementById('pc');
+const ctx = cv.getContext('2d');
+
+let active2 = false;   // 是否处于第二阶段
+let musicCued = false; // 音乐计时弹字是否已开始
+
+/* ============================ 第一阶段装饰 ============================ */
+/* --- 生日元素随机铺满 --- */
+(function buildItems(){
+  const EMO = ['🎂','🎈','🎁','🕯️','🎊','🎉','👑','🧁','🎀','🍰','🥳','🍬'];
+  const box = document.getElementById('bgItems');
+  box.innerHTML = '';
+  for (let i = 0; i < 46; i++){
+    const s = document.createElement('span');
+    s.className = 'bg-item';
+    const size = 22 + Math.random() * 48;
+    s.textContent = EMO[i % EMO.length];
+    s.style.left = (Math.random() * 94 + 2) + 'vw';
+    s.style.top  = (Math.random() * 90 + 4) + 'vh';
+    s.style.fontSize = size + 'px';
+    s.style.setProperty('--rot', (-35 + Math.random() * 70) + 'deg');
+    s.style.animationDuration = (2.8 + Math.random() * 3.2) + 's';
+    s.style.animationDelay = (-Math.random() * 5) + 's';
+    box.appendChild(s);
+  }
+})();
+
+/* --- 小星星持续飘落（约 20 颗循环） --- */
+(function buildStars(){
+  const box = document.getElementById('starsWrap');
+  box.innerHTML = '';
+  for (let i = 0; i < 20; i++){
+    const s = document.createElement('span');
+    s.className = 'star';
+    s.textContent = Math.random() > .5 ? '✦' : '✧';
+    s.style.left = (Math.random() * 98 + 1) + 'vw';
+    s.style.fontSize = (10 + Math.random() * 9) + 'px';
+    s.style.animationDuration = (7 + Math.random() * 8) + 's';
+    s.style.animationDelay = (-Math.random() * 15) + 's'; // 负延迟让初始即有满屏星星
+    box.appendChild(s);
+  }
+})();
+
+/* --- 偶发流星（3.5~6.5 秒一道） --- */
+(function meteors(){
+  const box = document.getElementById('meteorWrap');
+  function shoot(){
+    if (active2) { schedule(); return; } // 仅第一阶段显示
+    const m = document.createElement('div');
+    m.className = 'meteor';
+    m.style.left = (Math.random() * 30 + 80) + 'vw';
+    m.style.top  = (Math.random() * 12 - 2) + 'vh';
+    m.style.setProperty('--deg', (28 + Math.random() * 12) + 'deg');
+    m.style.animation = 'meteorFly 1.05s ease-out forwards';
+    m.addEventListener('animationend', () => m.remove());
+    box.appendChild(m);
+    schedule();
+  }
+  function schedule(){ setTimeout(shoot, 3500 + Math.random() * 3000); }
+  setTimeout(shoot, 1200);
+})();
+
+/* ============================ 进入第二阶段 ============================ */
+document.getElementById('confirmBtn').addEventListener('click', () => {
+  const name = nameInput.value.trim();
+  if (!name){
+    cHint.classList.add('show');
+    card.classList.remove('shake'); void card.offsetWidth;
+    card.classList.add('shake');
+    setTimeout(() => cHint.classList.remove('show'), 1800);
+    return;
+  }
+  startStage2(name);
+});
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmBtnClick(); });
+function confirmBtnClick(){
+  document.getElementById('confirmBtn').click();
+}
+
+function startStage2(name){
+  active2 = true;
+  page1.classList.add('hidden');
+  page2.classList.remove('hidden');
+  popWrap.innerHTML = '';
+  replayBtn.classList.remove('show');
+  musicCued = false;
+
+  buildParticles(name);   // 粒子：先散开飘浮，再汇聚拼字
+  startMusic();           // 手势内解锁音频，1 秒后正式播放
+}
+
+/* --- 音乐：点击"确定"手势内解锁，1 秒后开播（规避自动播放限制） --- */
+let musicStartAt = 0;   // 兜底计时起点（音乐被拦截或文件缺失时用）
+let timeOffset = 0, lastRaw = 0;   // 处理 loop 播放 currentTime 回卷：累计真实播放时长
+
+function startMusic(){
+  bgm.currentTime = 0;
+  timeOffset = 0; lastRaw = 0;
+  bgm.volume = 0;                       // 解锁瞬间静音，避免瞬间漏音
+  const unlock = bgm.play();
+  if (unlock && unlock.then){
+    unlock.then(() => { bgm.pause(); bgm.currentTime = 0; bgm.volume = 1; })
+          .catch(() => { bgm.volume = 1; });
+  }
+  setTimeout(() => {
+    bgm.currentTime = 0;                // 以音乐开始播放时刻为计时起点
+    musicStartAt = performance.now();
+    musicCued = true;
+    const p = bgm.play();
+    if (p && p.catch) p.catch(() => {}); // 再被拦截则走兜底计时
+  }, 1000);
+}
+
+/* 播放时间（秒）：优先以音频当前播放为准，跨循环自动累计；播放失败则用墙钟兜底 */
+function getBgmTime(){
+  const raw = bgm.currentTime;
+  if (raw < lastRaw){
+    timeOffset += (isFinite(bgm.duration) && bgm.duration > 0) ? bgm.duration : lastRaw;
+  }
+  lastRaw = raw;
+  if (bgm.paused) return (performance.now() - musicStartAt) / 1000;
+  return timeOffset + raw;
+}
+
+/* 兜底：若被浏览器拦截，任意触屏处重试播放 */
+page2.addEventListener('pointerdown', () => {
+  if (active2 && musicCued && bgm.paused) bgm.play().catch(() => {});
+});
+
+/* ============================ 弹字时间序列（以音乐开始为 0 点，单位：秒） ============================ */
+/* 方向编号：1=上 2=下 3=左 4=右 */
+const CUES = [
+  { t: 0.12, d:'up',    txt:'今天是你的生日' },
+  { t: 2.07, d:'down',  txt:'一年也只有一次' },
+  { t: 4.01, d:'left',  txt:'我希望你能够放肆' },
+  { t: 5.26, d:'right', txt:'去做你想要做的事' },
+  { t: 7.20, d:'up',    txt:'我最亲爱的宝贝' },
+  { t: 9.15, d:'down',  txt:'你又年长了一岁' },
+  { t: 11.09,d:'left',  txt:'祝愿你事事顺遂我祝愿你快乐加倍' },
+  { t: 14.29,d:'right', txt:'我祝你前途明亮我祝你一生坦荡' },
+  { t: 18.18,d:'up',    txt:'我祝你能实现愿望和你的预期一样' },
+  { t: 22.07,d:'down',  txt:'祝你每天都快乐今天事生日快乐' },
+  { t: 25.26,d:'left',  txt:'以后的每一个生日都会有人陪你过' },
+  { t: 29.15,d:'right', txt:'今天是你的生日一年也只有一次' },
+  { t: 33.04,d:'up',    txt:'我希望你能够放肆去做你想要的事' },
+];
+let cueIdx = 0;
+
+function fireCue(c){
+  const el = document.createElement('div');
+  el.className = 'pop ' + c.d;
+  if (c.txt.length >= 12) el.classList.add('long');
+  el.textContent = c.txt;
+  popWrap.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+  // 停留约 3 秒后柔和淡出（同方向不会互相遮挡）
+  setTimeout(() => el.classList.add('out'), 3000);
+  setTimeout(() => el.remove(), 4800);
+  if (c === CUES[CUES.length - 1]){
+    setTimeout(() => replayBtn.classList.add('show'), 1800); // 最后一条弹完后出现按钮
+  }
+}
+
+/* ============================ 粒子拼字（第二阶段核心） ============================ */
+const PINK = ['#ff5d8f','#ff87ab','#ffb3c6','#ffd6e0','#e86a9b','#ff9eb5'];
+const FONT_STACK = '"YouRan","PingFang SC","Microsoft YaHei",sans-serif';
+let parts = [], phase = 0, phaseStart = 0;
+// phase: 0=散开飘浮 1=汇聚 2=成型呼吸
+
+function sizeCanvas(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = innerWidth * dpr;
+  cv.height = innerHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function sampleText(text, step, W, H, cx, cy, fs){
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const t = tmp.getContext('2d', { willReadFrequently: true });
+  t.font = '700 ' + fs + 'px ' + FONT_STACK; // canvas 不支持 var()，必须用实际字体栈
+  t.textAlign = 'center'; t.textBaseline = 'middle';
+  t.fillStyle = '#000';
+  t.fillText(text, cx, cy);
+  const data = t.getImageData(0, 0, W, H).data;
+  const pts = [];
+  const half = fs * text.length * .62 + 30;   // 扫描范围略大于文字宽度
+  const y0 = Math.max(0, Math.floor(cy - fs)), y1 = Math.min(H, Math.ceil(cy + fs));
+  const x0 = Math.max(0, Math.floor(cx - half)), x1 = Math.min(W, Math.ceil(cx + half));
+  for (let y = y0; y < y1; y += step){
+    for (let x = x0; x < x1; x += step){
+      if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
+    }
+  }
+  return pts;
+}
+
+function buildParticles(name){
+  const text = name + '，生日快乐';
+  sizeCanvas();
+  const W = innerWidth, H = innerHeight;
+  const cx = W / 2, cy = H * 0.40;
+
+  // 自适应字号：保证完整放下
+  let fs = Math.min(66, W * 0.13, H * 0.085);
+  const tmp = document.createElement('canvas');
+  tmp.width = tmp.height = 200;
+  const tc = tmp.getContext('2d');
+  const measure = f => {
+    tc.font = '700 ' + f + 'px ' + FONT_STACK;
+    return tc.measureText(text).width;
+  };
+  while (measure(fs) > W * 0.9 && fs > 20) fs -= 2;
+  fs = Math.round(fs);
+
+  // 按步长采样文字像素点（点数过多时自动增大步长，保护移动端性能）
+  let pts = null;
+  for (const s of [4, 5, 7, 9, 11]){
+    const p = sampleText(text, s, W, H, cx, cy, fs);
+    if (p.length <= 3400 || s === 11){ pts = p; break; }
+  }
+
+  // 生成粒子：初始随机散开（先飘浮）
+  parts = pts.map(([tx, ty]) => {
+    let hx, hy;
+    do {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * Math.max(W, H) * .55;
+      hx = cx + Math.cos(a) * r;
+      hy = cy + Math.sin(a) * r;
+    } while (hx < 0 || hx > W || hy < 0 || hy > H);
+    return {
+      tx, ty, x: hx, y: hy,
+      vx: (Math.random() - .5) * .8, vy: (Math.random() - .5) * .8,
+      s: 1.4 + Math.random() * 1.6,
+      c: PINK[(Math.random() * PINK.length) | 0],
+      tw: Math.random() * Math.PI * 2,      // 呼吸闪烁相位
+      tws: .6 + Math.random() * 1.2,        // 呼吸频率
+      d: Math.random() * .45,               // 汇聚延迟错开
+      jx: Math.random() * Math.PI * 2, jy: Math.random() * Math.PI * 2
+    };
+  });
+
+  phase = 0;
+  phaseStart = performance.now();
+}
+
+const easeCubic = p => 1 - Math.pow(1 - p, 3);
+
+function stepParticles(now){
+  const W = innerWidth, H = innerHeight;
+  let t = (now - phaseStart) / 1000;
+
+  // 阶段切换：每帧只判断一次（放在循环外，避免同一帧内粒子进度不同步）
+  if (phase === 0 && t >= 1.2){ phase = 1; phaseStart = now; t = 0; }
+  if (phase === 1 && t >= 2.4){ phase = 2; phaseStart = now; t = 0; }
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (phase === 0){                          // 散开飘浮（约 1.2s）
+    for (const p of parts){
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+      ctx.globalAlpha = .9; ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (phase === 1){                   // 汇聚拼字（约 2.2s，错峰入场）
+    for (const p of parts){
+      const pr = Math.min(1, Math.max(0, (t - p.d) / (2.2 - p.d)));
+      if (pr >= 1){ p.x = p.tx; p.y = p.ty; }
+      else {
+        const k = easeCubic(pr) * .18;       // 缓动趋近，越靠近目标越稳
+        p.x += (p.tx - p.x) * k;
+        p.y += (p.ty - p.y) * k;
+      }
+      ctx.globalAlpha = .9; ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {                                   // 成型：轻微呼吸闪烁 + 微颤
+    for (const p of parts){
+      const a = .62 + .38 * Math.sin(t * p.tws + p.tw);            // 呼吸
+      const jx = Math.sin(t * .7 + p.jx) * 1.3;                    // 微颤
+      const jy = Math.cos(t * .8 + p.jy) * 1.3;
+      ctx.globalAlpha = Math.max(.25, a);
+      ctx.fillStyle = p.c;
+      ctx.beginPath();
+      ctx.arc(p.x + jx, p.y + jy, p.s * (0.9 + .1 * a), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ============================ 主循环：粒子 + 音乐计时弹字 ============================ */
+let cueDone = false;
+function loop(now){
+  if (active2) stepParticles(now);
+
+  // 弹字计时：以 audio.currentTime 为基准，与音乐严格同步（跨循环累计、失败兜底）
+  if (active2 && musicCued && !cueDone){
+    const t = getBgmTime();
+    while (cueIdx < CUES.length && t >= CUES[cueIdx].t){
+      fireCue(CUES[cueIdx]);
+      cueIdx++;
+    }
+    if (cueIdx >= CUES.length) cueDone = true;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ============================ 再来一遍：回到第一阶段 ============================ */
+replayBtn.addEventListener('click', () => {
+  bgm.pause();
+  bgm.currentTime = 0;
+  bgm.volume = 1;
+  musicCued = false;
+  cueIdx = 0;
+  cueDone = false;
+  parts = [];
+  phase = 0;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  nameInput.value = '';          // 清空输入
+  replayBtn.classList.remove('show');
+  active2 = false;
+  page2.classList.add('hidden');
+  page1.classList.remove('hidden');
+});
+
+window.addEventListener('resize', () => {
+  if (active2) sizeCanvas();     // 旋转屏幕时按新尺寸重建画布（粒子阵型在下次进入时重建）
+});
+</script>
+</body>
+</html>
