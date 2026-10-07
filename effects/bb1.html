@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>生日快乐 · 竖屏祝福特效</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  @supports (height:100dvh){ html,body{height:100dvh} }
+  body{
+    position:fixed;inset:0;width:100%;
+    background:
+      radial-gradient(80% 80% at 85% 12%, rgba(255,255,255,.38), rgba(255,255,255,0) 62%),
+      radial-gradient(70% 70% at 8% 92%, rgba(255,156,196,.5), rgba(255,156,196,0) 60%),
+      linear-gradient(135deg,#ffd9e6 0%,#ffb6cf 52%,#ffc4d8 100%);
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+ 
+  /* 设计稿舞台：540x1200（20:9 竖屏基准），整体等比缩放铺满屏幕 */
+  .stage{position:absolute;left:50%;top:50%;width:540px;height:1200px;transform:translate(-50%,-50%) scale(1)}
+ 
+  /* 主标题背后的柔和光晕 */
+  .glow{
+    position:absolute;left:50%;top:50%;width:340px;height:340px;
+    margin-left:-170px;margin-top:-170px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.9) 0%,rgba(255,246,220,.45) 42%,rgba(255,255,255,0) 70%);
+    animation:breath 2.4s ease-in-out infinite;z-index:4;
+  }
+  @keyframes breath{
+    0%,100%{transform:scale(1);opacity:.85}
+    50%{transform:scale(1.1);opacity:1}
+  }
+ 
+  /* 中心主标题（白色 + 白金光晕 + 轻微呼吸动画） */
+  .title{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    font-size:52px;font-weight:700;letter-spacing:3px;white-space:nowrap;
+    color:#fff;
+    text-shadow:0 0 12px rgba(255,255,255,.6),0 0 24px rgba(255,200,0,.35);
+    animation:breathe 2s ease-in-out infinite;
+    transition:opacity 1s ease;
+    z-index:7;
+  }
+  .title.dim{opacity:.25}
+  @keyframes breathe{
+    0%,100%{transform:translate(-50%,-50%) scale(1)}
+    50%{transform:translate(-50%,-50%) scale(1.05)}
+  }
+ 
+  /* 已定型祝福词的"画布"层：文字烘焙成位图，长期累积不占 DOM、不卡顿 */
+  #layer{position:absolute;left:0;top:0;width:100%;height:100%;z-index:5}
+ 
+  /* 正在弹入动画的祝福词层 */
+  #words{position:absolute;left:0;top:0;width:100%;height:100%;z-index:6}
+  .word{position:absolute;white-space:nowrap;font-weight:700}
+  .word .inner{
+    display:inline-block;
+    text-shadow:0 1px 2px rgba(180,60,100,.35);
+    animation:pop .4s ease both;
+  }
+  @keyframes pop{
+    0%{transform:scale(.3) rotate(var(--rotate))}
+    100%{transform:scale(1) rotate(var(--rotate))}
+  }
+ 
+  /* 交互卡片（烟花之后的方框流程，窄屏竖版尺寸） */
+  .card{position:absolute;left:50%;top:50%;z-index:8;opacity:0;pointer-events:none;transition:opacity .5s}
+  .card.show{opacity:1;pointer-events:auto}
+  .box{
+    position:absolute;left:0;top:0;width:160px;height:72px;
+    transform:translate(-50%,-50%);
+    background:linear-gradient(180deg,#ffffff 0%,#fff3f7 100%);
+    border-radius:18px;
+    box-shadow:0 8px 24px rgba(180,60,100,.28);
+    color:#d6336c;font-size:17px;font-weight:700;line-height:1.4;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    white-space:normal;padding:0 10px;cursor:pointer;
+    transition:transform .65s cubic-bezier(.22,1,.36,1),opacity .4s ease;
+  }
+  .box-main{animation:cardPop .5s cubic-bezier(.34,1.56,.64,1) both}
+  @keyframes cardPop{
+    0%{transform:translate(-50%,-50%) scale(.5);opacity:0}
+    100%{transform:translate(-50%,-50%) scale(1);opacity:1}
+  }
+  .box-l,.box-r{opacity:0;pointer-events:none}
+  .card.split .box-main{animation:none;transform:translate(-50%,-50%) scale(.45);opacity:0;pointer-events:none}
+  .card.split .box-l{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) translateX(-92px)}
+  .card.split .box-r{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) translateX(92px)}
+  /* 点击左方框后，两个选择方框淡出 */
+  .card.fadeout .box-l,.card.fadeout .box-r{opacity:0;pointer-events:none}
+ 
+  /* 打字机文字卡片（点击左方框后弹出，窄屏约 86% 宽、超出可滚动） */
+  .type-card{
+    position:absolute;left:50%;top:50%;z-index:9;
+    width:86%;max-height:72%;
+    transform:translate(-50%,-50%);
+    background:linear-gradient(180deg,#ffffff 0%,#fff3f7 100%);
+    border-radius:20px;
+    box-shadow:0 10px 32px rgba(180,60,100,.3);
+    padding:22px 18px;
+    overflow-y:auto;
+    display:none;
+  }
+  .type-card.show{display:block;animation:typePop .45s cubic-bezier(.34,1.56,.64,1) both}
+  @keyframes typePop{
+    0%{transform:translate(-50%,-50%) scale(.6);opacity:0}
+    100%{transform:translate(-50%,-50%) scale(1);opacity:1}
+  }
+  .type-body{
+    font-size:16px;line-height:1.8;color:#a03060;font-weight:500;
+    white-space:pre-wrap;word-break:break-all;
+  }
+  .cursor{
+    display:inline-block;width:2px;height:1.2em;
+    background:#d6336c;vertical-align:-.25em;margin-left:2px;
+    animation:blink 1s step-end infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+</style>
+</head>
+<body>
+  <audio id="bgm" src="/audio/sr1.mp3" loop></audio>
+  <audio id="bgm2" src="/audio/xw.mp3" loop></audio>
+  <audio id="bgm3" src="/audio/xw1.mp3" loop></audio>
+  <div class="stage" id="stage">
+    <div class="glow"></div>
+    <canvas id="layer"></canvas>
+    <div class="title" id="title">生日快乐！</div>
+    <div id="words"></div>
+    <div class="card" id="card">
+      <div class="box box-main" id="mainBox">请宝宝点一下</div>
+      <div class="box box-l" id="leftBox">宝宝喜欢吗？</div>
+      <div class="box box-r" id="rightBox">宝宝不喜欢吗？</div>
+    </div>
+    <div class="type-card" id="typeCard">
+      <div class="type-body"><span id="typeText"></span><span class="cursor"></span></div>
+    </div>
+  </div>
+<script>
+(function(){
+  'use strict';
+  // 祝福词（按指定顺序播放）
+  var WORDS = [
+    '心想事成','万事如意','身体健康','阖家欢乐','平安喜乐','一帆风顺','前程似锦',
+    '步步高升','财源广进','生意兴隆','事业有成','学业进步','金榜题名','工作顺利',
+    '幸福美满','爱情甜蜜','家庭和睦','岁岁平安','年年有余','五谷丰登','六六大顺',
+    '吉祥如意','大吉大利','福星高照','五福临门','笑口常开','笑逐颜开','天天开心',
+    '快乐每一天','青春永驻','永葆青春','好运连连','好事成双','双喜临门','喜从天降',
+    '马到成功','旗开得胜','梦想成真','心想事成','顺风顺水','平步青云','蒸蒸日上',
+    '红红火火','幸福安康','春风得意'
+  ];
+ 
+  var stage = document.getElementById('stage');
+  var title = document.getElementById('title');
+  var wordsLayer = document.getElementById('words');
+  var canvas = document.getElementById('layer');
+  var ctx = canvas.getContext('2d');
+  var bgm = document.getElementById('bgm');
+  var card = document.getElementById('card');
+  var mainBox = document.getElementById('mainBox');
+  var leftBox = document.getElementById('leftBox');
+  var rightBox = document.getElementById('rightBox');
+  var typeCard = document.getElementById('typeCard');
+  var typeText = document.getElementById('typeText');
+  var bgm2 = document.getElementById('bgm2');
+  var bgm3 = document.getElementById('bgm3');
+ 
+  /* ---- 舞台等比缩放（竖屏为设计方向；横屏打开时自动旋转 90° 铺满兜底） ---- */
+  var DESIGN_W = 540, DESIGN_H = 1200;
+  function fitStage(){
+    // 优先取 visualViewport 尺寸，规避移动端浏览器地址栏造成的偏差
+    var vv = window.visualViewport;
+    var w = (vv && vv.width) || window.innerWidth;
+    var h = (vv && vv.height) || window.innerHeight;
+    var portrait = h > w;
+    var s = portrait ? Math.min(w / DESIGN_W, h / DESIGN_H) : Math.min(w / DESIGN_H, h / DESIGN_W);
+    stage.style.transform = 'translate(-50%,-50%)' + (portrait ? '' : ' rotate(90deg)') + ' scale(' + s + ')';
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage);
+  fitStage();
+ 
+  /* 画布按设备像素比提高分辨率，高分屏下同样清晰 */
+  var DPR = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = DESIGN_W * DPR;
+  canvas.height = DESIGN_H * DPR;
+  ctx.scale(DPR, DPR);
+  var FONT_FAMILY = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif';
+ 
+  /* ---- 祝福词布局（随机位置，避开中心主标题，尽量互不重叠） ---- */
+  var STAGE_W = 540, STAGE_H = 1200;
+  var CENTER = { x: STAGE_W / 2, y: STAGE_H / 2 };
+  var SAFE = { w: 170, h: 95 };   // 中心禁区半宽/半高，避免遮挡主标题
+  // 喜庆配色池（多彩亮色，全部避开粉色背景色，保证清晰可读）
+  var COLORS = ['#ffffff','#ffd700','#ff8c00','#ff4500','#dc143c','#9932cc','#ff6347','#ffa500','#ffff33','#00ced1','#1e90ff','#32cd32'];
+  var SIZES = [14, 16, 18, 20, 22]; // 约 18px，均小于主标题 52px
+  var boxes = [];     // 历史词占位记录（用于避让计算）
+  var records = [];   // 每个词的完整信息（聚集爆炸时重建用）
+  var zCounter = 6;
+ 
+  function rand(min, max){ return min + Math.random() * (max - min); }
+ 
+  function rectOverlap(a, b, pad){
+    return !(a.x + a.w + pad < b.x || b.x + b.w + pad < a.x ||
+             a.y + a.h + pad < b.y || b.y + b.h + pad < a.y);
+  }
+  function inSafeZone(x, y, w, h){
+    var cx0 = CENTER.x - SAFE.w, cx1 = CENTER.x + SAFE.w;
+    var cy0 = CENTER.y - SAFE.h, cy1 = CENTER.y + SAFE.h;
+    return !(x + w < cx0 || x > cx1 || y + h < cy0 || y > cy1);
+  }
+ 
+  /* 弹入动画结束后，把文字烘焙进画布并移除 DOM 元素，性能稳定 */
+  function flatten(el){
+    var m = el._meta;
+    ctx.save();
+    ctx.translate(m.x + m.w / 2, m.y + m.h / 2);
+    ctx.rotate(m.rot);
+    ctx.font = '700 ' + m.size + 'px ' + FONT_FAMILY;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(180,60,100,.4)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = m.color;
+    ctx.fillText(m.text, 0, 0);
+    ctx.restore();
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }
+ 
+  function spawn(text){
+    var el = document.createElement('div');
+    el.className = 'word';
+    var inner = document.createElement('span');
+    inner.className = 'inner';
+    inner.textContent = text;
+    el.appendChild(inner);
+ 
+    var color = COLORS[(Math.random() * COLORS.length) | 0];
+    var size = SIZES[(Math.random() * SIZES.length) | 0];
+    el.style.color = color;
+    el.style.fontSize = size + 'px';
+    el.style.left = '-9999px';
+    el.style.top = '-9999px';
+    el.style.zIndex = zCounter++;
+    wordsLayer.appendChild(el);
+    var w = el.offsetWidth, h = el.offsetHeight; // 先离屏测量实际尺寸
+ 
+    // 随机尝试候选位置，优先选完全不重叠的
+    var best = null, bestScore = Infinity;
+    for (var t = 0; t < 60; t++){
+      var x = rand(10, STAGE_W - 10 - w);
+      var y = rand(10, STAGE_H - 10 - h);
+      if (inSafeZone(x, y, w, h)) continue; // 中心禁区直接排除
+      var score = 0;
+      for (var i = 0; i < boxes.length; i++){
+        if (rectOverlap({x: x, y: y, w: w, h: h}, boxes[i], 8)) score += 40;
+      }
+      // 轻微向屏幕四周扩散的倾向
+      var dx = (x + w / 2) - CENTER.x, dy = (y + h / 2) - CENTER.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      score += Math.max(0, 1 - d / 650) * 12;
+      if (score === 0){ best = {x: x, y: y}; break; }
+      if (score < bestScore){ bestScore = score; best = {x: x, y: y}; }
+    }
+    if (!best) best = { x: rand(14, STAGE_W - 14 - w), y: rand(14, STAGE_H - 14 - h) };
+ 
+    var rot = rand(-14, 14);
+    el.style.left = best.x + 'px';
+    el.style.top = best.y + 'px';
+    el.style.setProperty('--rotate', rot.toFixed(1) + 'deg'); // 旋转融入弹入动画
+    boxes.push({ x: best.x, y: best.y, w: w, h: h });
+ 
+    var rec = { x: best.x, y: best.y, w: w, h: h, size: size, color: color, rot: rot * Math.PI / 180, rotDeg: rot, text: text };
+    el._meta = rec;
+    records.push(rec);
+ 
+    // 动画完成后烘焙到画布；setTimeout 作为 animationend 的兜底
+    var done = false;
+    var finish = function(){
+      if (done) return;
+      done = true;
+      flatten(el);
+    };
+    inner.addEventListener('animationend', finish);
+    setTimeout(finish, 700);
+  }
+ 
+  /* ---- 背景音乐：页面加载即播放（移动端需手势，首次触摸自动续播） ---- */
+  var audioOn = false, finished = false;
+  function startAudio(){
+    if (audioOn || finished) return;
+    audioOn = true;
+    if (!bgm || !bgm.play) return;
+    var p = bgm.play();
+    if (p && p.catch) p.catch(function(){ audioOn = false; });
+  }
+  window.addEventListener('load', startAudio);
+  document.addEventListener('touchstart', startAudio);
+  document.addEventListener('click', startAudio);
+ 
+  /* ---- 每 0.1s 按顺序出现一个，播完整轮后进入"暂停音乐 → 聚集 → 爆炸" ---- */
+  var index = 0;
+  function tick(){
+    if (finished) return;
+    spawn(WORDS[index]);
+    index++;
+    if (index >= WORDS.length){
+      finished = true;
+      bgm.pause();               // 全部祝福词播完，暂停背景音乐
+      setTimeout(gatherWords, 500); // 等最后几个词的弹入动画完成
+      return;
+    }
+    setTimeout(tick, 100);
+  }
+  setTimeout(tick, 500); // 让主标题先完整呈现
+ 
+  /* ---- 全部祝福词同时向中心聚集 ---- */
+  function gatherWords(){
+    wordsLayer.innerHTML = '';
+    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+    var els = [];
+    for (var i = 0; i < records.length; i++){
+      var r = records[i];
+      var el = document.createElement('div');
+      el.className = 'word';
+      el.textContent = r.text;
+      el.style.color = r.color;
+      el.style.fontSize = r.size + 'px';
+      el.style.textShadow = '0 1px 2px rgba(180,60,100,.35)';
+      el.style.left = r.x + 'px';
+      el.style.top = r.y + 'px';
+      el.style.transform = 'rotate(' + r.rotDeg + 'deg)';
+      el.style.transition = 'transform .95s cubic-bezier(.5,.05,.75,.35), opacity .95s ease';
+      wordsLayer.appendChild(el);
+      els.push(el);
+    }
+    // 下一帧统一开始飞向中心，保证"同时聚集"
+    requestAnimationFrame(function(){
+      for (var j = 0; j < els.length; j++){
+        var r = records[j];
+        var dx = CENTER.x - (r.x + r.w / 2);
+        var dy = CENTER.y - (r.y + r.h / 2);
+        els[j].style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(' + r.rotDeg + 'deg) scale(.12)';
+        els[j].style.opacity = '0';
+      }
+    });
+    setTimeout(function(){
+      wordsLayer.innerHTML = '';
+      explode();
+    }, 1050);
+  }
+ 
+  /* ---- 烟花粒子（带光晕拖尾，颜色丰富） ---- */
+  function hexToRgba(hex, a){
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  var SPRITES = (function(){
+    var cs = COLORS.concat(['#ffd700','#ff9d3c','#ff6ec7','#845ef7','#ffffff']);
+    return cs.map(function(color){
+      var c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      var sc = c.getContext('2d');
+      var g = sc.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255,255,255,.95)');
+      g.addColorStop(.35, hexToRgba(color, .9));
+      g.addColorStop(1, hexToRgba(color, 0));
+      sc.fillStyle = g;
+      sc.fillRect(0, 0, 64, 64);
+      return c;
+    });
+  })();
+ 
+  function explode(){
+    var parts = [];
+    for (var i = 0; i < 240; i++){
+      var ang = Math.random() * Math.PI * 2;
+      var sp = rand(1.5, 11);
+      parts.push({
+        x: CENTER.x, y: CENTER.y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - rand(0, 1.5),
+        s: rand(8, 26),
+        spr: SPRITES[i % SPRITES.length],
+        life: 1,
+        dec: rand(.010, .022)
+      });
+    }
+    ctx.globalCompositeOperation = 'lighter'; // 叠加发光，烟花更绚
+    var t0 = performance.now();
+    function frame(now){
+      var elapsed = now - t0;
+      ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+      var alive = false;
+      for (var k = 0; k < parts.length; k++){
+        var p = parts[k];
+        if (p.life <= 0) continue;
+        alive = true;
+        var px = p.x, py = p.y;
+        p.x += p.vx; p.y += p.vy;
+        p.vx *= .982;
+        p.vy = p.vy * .982 + .05; // 轻微重力下坠
+        p.life -= p.dec;
+        ctx.globalAlpha = Math.max(p.life, 0) * .35;
+        ctx.drawImage(p.spr, px - p.s / 2, py - p.s / 2, p.s, p.s); // 拖尾残影
+        ctx.globalAlpha = Math.max(p.life, 0) * .95;
+        ctx.drawImage(p.spr, p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+      }
+      if (alive && elapsed < 2600){
+        requestAnimationFrame(frame);
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.clearRect(0, 0, STAGE_W, STAGE_H); // 清掉烟花残迹，露出干净粉色背景
+        showCard();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+ 
+  /* ---- 烟花之后：显示交互方框 ---- */
+  function showCard(){
+    title.classList.add('dim'); // 主标题淡化为背景氛围
+    card.classList.add('show');
+  }
+  mainBox.addEventListener('click', function(){
+    card.classList.add('split'); // 方框丝滑分成左右两个
+  });
+  var rStage = 0;
+  rightBox.addEventListener('click', function(){
+    if (rStage === 0){
+      rStage = 1;
+      rightBox.textContent = '宝宝我做了好久哎';
+      rightBox.style.transform = 'translate(-50%,-50%) translateX(92px) scale(.3)'; // 缩小到 30%
+    } else if (rStage === 1){
+      rStage = 2;
+      rightBox.textContent = '宝贝我爱你，不许不喜欢';
+      rightBox.style.transform = 'translate(-50%,-50%) translateX(92px) scale(.24)'; // 再缩小 20%
+    }
+  });
+ 
+  /* ---- 点击左方框：双音频同时循环播放 + 淡出选择框 + 打字机文字卡片 ---- */
+  var TYPE_TEXT_1 = '希望你往后的日子里，晨起有温柔的风，入夜有安稳的梦，日常里少些烦恼多些顺遂，遇到的都是真诚与善意，永远保有眼里的光亮，平安喜乐，万事随心。';
+  var TYPE_TEXT_2 = '其实藏了很久的心意想告诉你：遇见你之后，很多平淡的瞬间都悄悄有了意义。你笑的时候，周遭的一切都跟着明亮起来；你认真的模样，总在我心里反复浮现。我总忍不住留意你的所有情绪，想把所有好运都攒给你，想陪你走过更多细碎又温暖的日常。不是一时兴起的好感，是真心实意地喜欢你，想成为你身边那个特别的人。';
+  var leftDone = false;
+  leftBox.addEventListener('click', function(){
+    if (leftDone) return; // 防止重复触发
+    leftDone = true;
+    var p2 = bgm2.play(), p3 = bgm3.play();
+    if (p2 && p2.catch) p2.catch(function(){}); // 音频路径缺失等异常不影响主流程
+    if (p3 && p3.catch) p3.catch(function(){});
+    card.classList.add('fadeout'); // 两个选择方框淡出
+    setTimeout(function(){
+      typeCard.classList.add('show');
+      var full = TYPE_TEXT_1 + '\n' + TYPE_TEXT_2;
+      var i = 0;
+      (function typeChar(){
+        if (i > full.length) return;
+        typeText.textContent = full.slice(0, i);
+        i++;
+        var ch = full.charAt(i - 1);
+        // 每字约 45ms，换行处稍作停顿
+        setTimeout(typeChar, ch === '\n' ? 350 : 45);
+      })();
+    }, 320);
+  });
+ 
+  // 禁止移动端双击缩放与多指手势
+  var lastTap = 0;
+  document.addEventListener('touchend', function(e){
+    var now = Date.now();
+    if (now - lastTap <= 300) e.preventDefault();
+    lastTap = now;
+  }, { passive: false });
+  document.addEventListener('touchstart', function(e){
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+})();
+</script>
+</body>
+</html>
