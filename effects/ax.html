@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>爱心弹幕</title>
+
+<!-- ===== OG 分享标签（按需替换 content） ===== -->
+<meta property="og:title" content="爱心弹幕 - 爱你宝宝" />
+<meta property="og:description" content="" />
+<meta property="og:image" content="" />
+<meta property="og:type" content="website" />
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;              /* 无滚动条 */
+    touch-action: manipulation;    /* 移动端禁用双击缩放 */
+  }
+
+  body {
+    background: #000;              /* 纯黑背景 */
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    cursor: default;
+  }
+
+  /* ===== 3D 爱心舞台 ===== */
+  #heart-wrap {
+    position: absolute;
+    left: 50%;
+    top: 44%;
+    width: 0;
+    height: 0;
+    perspective: 1200px;
+  }
+
+  #heart {
+    position: relative;
+    width: 0;
+    height: 0;
+    transform-style: preserve-3d;
+  }
+
+  .bubble {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: center center;
+    will-change: transform, opacity;
+    padding: 7px 15px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    box-shadow: 0 6px 18px rgba(255, 90, 160, .25);
+    text-shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
+  /* ===== 中心标题 ===== */
+  #title {
+    position: fixed;
+    left: 50%;
+    top: 44%;
+    transform: translate(-50%, -50%);
+    font-size: clamp(32px, 6vw, 54px);
+    font-weight: 800;
+    color: #ff4d7d;
+    letter-spacing: 4px;
+    text-shadow: 0 0 24px rgba(255, 77, 125, .6);
+    pointer-events: none;
+    z-index: 5;
+    animation: titleIn 1.2s ease-out .2s backwards;
+  }
+  @keyframes titleIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+
+  /* ===== 重放按钮 ===== */
+  #replay {
+    position: fixed;
+    right: 24px;
+    bottom: 76px;
+    z-index: 10;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 999px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 3px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #ff7eb0, #ff4d7d);
+    box-shadow: 0 8px 24px rgba(255, 77, 125, .45);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  #replay:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 12px 30px rgba(255, 77, 125, .55); }
+  #replay:active { transform: scale(.96); }
+
+  /* ===== 左下角署名 ===== */
+  #logo {
+    position: fixed;
+    left: 20px;
+    bottom: 66px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #logo .avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #fff;
+    background: linear-gradient(135deg, #a78bfa, #ff7eb0);
+    box-shadow: 0 4px 14px rgba(255, 126, 176, .5);
+    border: 2px solid rgba(255,255,255,.7);
+  }
+  #logo p { font-size: 15px; font-weight: 600; color: #ffb3cf; }
+
+  /* ===== 底部"请双击"提示 ===== */
+  #hint {
+    position: fixed;
+    left: 50%;
+    bottom: 58px;
+    transform: translateX(-50%);
+    z-index: 25;
+    font-size: 14px;
+    letter-spacing: 6px;
+    color: rgba(255,255,255,.75);
+    pointer-events: none;
+    animation: hintBreath 2.4s ease-in-out infinite;
+  }
+  @keyframes hintBreath {
+    0%, 100% { opacity: .35; }
+    50%      { opacity: .95; }
+  }
+
+  /* ===== 底部半透明购买提示栏 ===== */
+  .buy-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 13px;
+    color: rgba(255,255,255,.85);
+    background: rgba(255,255,255,.07);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .buy-bar a {
+    color: #ff7eb0;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 3px 10px;
+    border: 1px solid rgba(255,126,176,.5);
+    border-radius: 999px;
+  }
+  .buy-bar a:active { background: rgba(255,126,176,.2); }
+
+  /* ===== 背景漂浮粒子 ===== */
+  .bg-particle {
+    position: fixed;
+    bottom: -60px;
+    z-index: 0;
+    border-radius: 50%;
+    opacity: 0;
+    pointer-events: none;
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+    12%  { opacity: .7; }
+    85%  { opacity: .5; }
+    100% { transform: translateY(-110vh) translateX(40px) scale(1.15); opacity: 0; }
+  }
+
+  /* ===== 鼠标/手指爱心粒子 ===== */
+  .mouse-heart {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    font-size: 16px;
+    transform: translate(-50%, -50%);
+    animation: rise 1.3s ease-out forwards;
+  }
+  @keyframes rise {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(.5) rotate(0deg); }
+    100% { opacity: 0; transform: translate(-50%, -160%) scale(1.3) rotate(35deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景音乐：打开页面自动播放，播完循环。路径为服务器绝对路径 /audio/wm.mp3 -->
+<audio id="bgm" src="/audio/wm.mp3" loop autoplay playsinline preload="auto"></audio>
+
+<div id="heart-wrap"><div id="heart"></div></div>
+
+<div id="title">爱你宝宝</div>
+<button id="replay">重放</button>
+
+<div id="logo">
+  <div class="avatar">♥</div>
+  <p>宝宝我爱你</p>
+</div>
+
+<div id="hint">请双击</div>
+
+<div class="buy-bar">
+  <span>喜欢这个爱心弹幕特效？</span>
+  <a href="#" target="_blank">获取完整版</a>
+</div>
+
+<script>
+/* ===================== 可自定义配置 ===================== */
+const CONFIG = {
+  logoText: '宝宝我爱你',        // 左下角署名
+  musicUrl: '/audio/wm.mp3',     // 背景音乐路径（打开页面自动循环播放，播完自动重播）
+  bubbleCountPerLayer: 24,       // 每层气泡数
+  layerCount: 9,                 // 3D 层数
+  heartScale: 16,                // 爱心基础大小
+  rotateSpeed: 0.35,             // 旋转速度
+  scatterDelay: 2600,            // 重放按钮：散开后自动回位延时(ms)
+};
+
+/* ===================== 情话文案 ===================== */
+const tips = [
+  '想念在风里飘','月亮为你亮','喜欢你很久了','你是我的心动','温柔落在人间',
+  '星光都为你闪','梦里有你真好','世界因你柔软','心跳为你加速','有你真好',
+  '你是独一无二的光','遇见你是浪漫的开始','晚风也温柔了','你是我的人间理想',
+  '想陪你看星星','今夜的梦给你','宇宙都在偏爱你','你是人间的浪漫',
+  '拥抱更紧一点','想你成习惯了','一眼也是永恒','你眼里有星星','你的温柔让我沦陷',
+  '风都是甜的','为你心动不止','想成为你的例外','心有桃花一片','你是我梦里的光',
+  '想和你看海','此刻的风想你','遇见你后时间变慢','所有浪漫都与你有关',
+  '想靠近你一点','你的名字是我心事','心动是因为你','想牵你的手看日落',
+  '每次想你星星都亮了','心跳藏不住','有你世界亮一点','甜在风里也在心里',
+  '你的笑胜过星河','陪你春夏秋冬','你是首选也是例外','世界因你而转动'
+];
+
+/* ===================== 气泡渐变配色 ===================== */
+const COLORS = [
+  'linear-gradient(135deg,#b388ff,#7c4dff)',
+  'linear-gradient(135deg,#ff8a9e,#ff5c7f)',
+  'linear-gradient(135deg,#7ec4ff,#3d8bff)',
+  'linear-gradient(135deg,#5ee0c9,#12b3a2)',
+  'linear-gradient(135deg,#ffc46b,#ff9d3c)',
+  'linear-gradient(135deg,#ff8fc0,#ff5ca8)',
+  'linear-gradient(135deg,#9ac8ff,#6a8dff)',
+  'linear-gradient(135deg,#ffa88f,#ff7043)',
+  'linear-gradient(135deg,#c5a3ff,#8f66ff)',
+  'linear-gradient(135deg,#7ff0b5,#2ecc8f)',
+];
+
+const stage  = document.getElementById('heart');
+const wrap   = document.getElementById('heart-wrap');
+const replay = document.getElementById('replay');
+const bgm    = document.getElementById('bgm');
+
+/* 心形线参数方程（数学坐标 y 向上） */
+const heartX = t => 16 * Math.pow(Math.sin(t), 3);
+const heartY = t => 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+
+let angle = 0;               // 全局 3D 旋转角
+let mode  = 'heart';         // 最后一次切换的目标形态：heart(爱心) / scatter(散开)
+
+/* 生成 3D 爱心气泡 */
+const bubbles = [];
+(function buildHeart() {
+  const s = CONFIG.heartScale;
+  for (let k = 0; k < CONFIG.layerCount; k++) {
+    const layerRot = (k / CONFIG.layerCount) * Math.PI * 2; // 绕 Y 轴分层
+    const n = CONFIG.bubbleCountPerLayer;
+    for (let i = 0; i < n; i++) {
+      const t = (i / n) * Math.PI * 2;
+      const hx = heartX(t) * s;   // 心形平面坐标
+      const hy = -heartY(t) * s;  // 屏幕 y 取反（尖角朝下）
+      const x = hx * Math.cos(layerRot); // 绕 Y 轴生成 3D 体积
+      const z = hx * Math.sin(layerRot);
+
+      const el = document.createElement('div');
+      el.className = 'bubble';
+      el.textContent = tips[(k * n + i) % tips.length];
+      el.style.background = COLORS[(k * n + i) % COLORS.length];
+      stage.appendChild(el);
+
+      /* 初始位置：屏幕内随机散落，页面加载后延迟有先后地聚集成爱心 */
+      const startX = (Math.random() - 0.5) * window.innerWidth * 0.95;
+      const startY = (Math.random() - 0.5) * window.innerHeight * 0.95;
+      const startZ = (Math.random() - 0.5) * 380;
+
+      bubbles.push({
+        el,
+        hx: x, hy, hz: z,                   // 心形成型位置（3D）
+        x: startX, y: startY, z: startZ,    // 当前位置（物理模拟）
+        vx: 0, vy: 0, vz: 0,                // 速度
+        sx: startX, sy: startY, sz: startZ, // 散开目标（初始=原地漂浮）
+        k: 8 + Math.random() * 14,          // 弹簧刚度（各不相同 → 飞回快慢不一）
+        c: 3.5 + Math.random() * 2.5,       // 阻尼
+        cur: 'scatter',                     // 当前生效形态
+        pending: 'heart',                   // 延迟后切换的形态
+        until: performance.now() + Math.random() * 1500, // 启动延迟：有先有后
+        wavePhase: Math.random() * Math.PI * 2,
+        waveAmp: 3 + Math.random() * 7,
+      });
+    }
+  }
+})();
+
+/* 生成随机散开目标（每次散开时调用） */
+function scatterTargets() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  for (const b of bubbles) {
+    b.sx = (Math.random() - 0.5) * vw * 1.1;
+    b.sy = (Math.random() - 0.5) * vh * 1.1;
+    b.sz = (Math.random() - 0.5) * 400;
+  }
+}
+
+/* 切换目标形态：每个气泡延迟随机时间后生效 → 有先有后的弹簧式运动 */
+function switchMode(newMode, maxDelay) {
+  mode = newMode;
+  const now = performance.now();
+  for (const b of bubbles) {
+    b.pending = newMode;
+    b.until = now + Math.random() * maxDelay;
+  }
+}
+
+/* ===================== 双击（桌面 + 移动端触摸）：散开 <-> 聚集 ===================== */
+function toggleMode() {
+  switchMode(mode === 'heart' ? 'scatter' : 'heart', mode === 'heart' ? 900 : 1600);
+  if (mode === 'scatter') scatterTargets();   // 每次散开都换新的随机位置
+  playMusic();
+}
+
+document.addEventListener('dblclick', e => {
+  if (e.target.closest('#replay') || e.target.closest('.buy-bar')) return;
+  toggleMode();
+});
+
+/* 移动端双击检测：两次触摸间隔 < 350ms 视为双击 */
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  const t = e.changedTouches[0];
+  if (t && (t.target.closest('#replay') || t.target.closest('.buy-bar'))) return;
+  const now = performance.now();
+  if (now - lastTap < 350) {
+    lastTap = 0;
+    toggleMode();
+  } else {
+    lastTap = now;
+  }
+});
+
+/* ===================== 重放按钮：散开一次后自动重新聚集 ===================== */
+replay.addEventListener('click', e => {
+  e.stopPropagation();
+  switchMode('scatter', 800);
+  scatterTargets();
+  setTimeout(() => switchMode('heart', 1600), CONFIG.scatterDelay);
+  playMusic();
+});
+
+/* ===================== 响应式：小屏整体缩放爱心 ===================== */
+function fitScale() {
+  const f = Math.min(1.1, Math.max(0.55, Math.min(window.innerWidth, window.innerHeight) / 800));
+  wrap.style.transform = 'scale(' + f + ')';
+}
+window.addEventListener('resize', fitScale);
+fitScale();
+
+/* 主渲染循环：弹簧物理驱动 */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(now - last, 64) / 1000;
+  last = now;
+  const time = now / 1000;
+
+  angle += dt * CONFIG.rotateSpeed;
+
+  const maxZ = 16 * CONFIG.heartScale;
+  const sinA = Math.sin(angle), cosA = Math.cos(angle);
+
+  for (const b of bubbles) {
+    if (now >= b.until) b.cur = b.pending;      // 延迟结束才切换目标
+
+    const inHeart = b.cur === 'heart';
+    /* 目标位置：爱心坐标 / 散开坐标；散开时浮动更自由 */
+    const waveAmp = inHeart ? b.waveAmp : b.waveAmp * 2.2;
+    const wave = Math.sin(time * 1.0 + b.wavePhase) * waveAmp;
+    const tx = inHeart ? b.hx : b.sx;
+    const ty = inHeart ? b.hy + wave : b.sy + wave;
+    const tz = inHeart ? b.hz : b.sz;
+
+    /* 弹簧-阻尼物理（散开稍快） */
+    const k = inHeart ? b.k : b.k * 1.6;
+    const c = inHeart ? b.c : b.c * 0.9;
+    b.vx += (k * (tx - b.x) - c * b.vx) * dt;
+    b.vy += (k * (ty - b.y) - c * b.vy) * dt;
+    b.vz += (k * (tz - b.z) - c * b.vz) * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    b.z += b.vz * dt;
+
+    /* 旋转后深度，用于透明度模拟远近 */
+    const worldZ = b.z * cosA - b.x * sinA;
+    const opacity = 0.5 + 0.5 * (worldZ / maxZ + 1) / 2;
+
+    b.el.style.transform =
+      `translate(-50%,-50%) rotateY(${angle}rad) translate3d(${b.x}px,${b.y}px,${b.z}px)`;
+    b.el.style.opacity = opacity;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ===================== 鼠标/手指爱心粒子 ===================== */
+const heartChars = ['♥', '❤', '♡', '💗', '💕', '✨'];
+let lastMove = 0;
+
+function spawnHeart(clientX, clientY) {
+  const now = performance.now();
+  if (now - lastMove < 55) return;    // 节流
+  lastMove = now;
+
+  const h = document.createElement('span');
+  h.className = 'mouse-heart';
+  h.textContent = heartChars[(Math.random() * heartChars.length) | 0];
+  h.style.left = clientX + 'px';
+  h.style.top = clientY + 'px';
+  h.style.fontSize = (12 + Math.random() * 16) + 'px';
+  h.style.color = `hsl(${300 + Math.random() * 60}, 85%, ${60 + Math.random() * 15}%)`;
+  document.body.appendChild(h);
+  setTimeout(() => h.remove(), 1300);
+}
+
+document.addEventListener('mousemove', e => spawnHeart(e.clientX, e.clientY));
+
+/* 移动端：手指滑动跟随粒子 */
+document.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  if (t) spawnHeart(t.clientX, t.clientY);
+}, { passive: true });
+
+/* ===================== 背景漂浮粒子 ===================== */
+(function createBgParticles() {
+  const dots = ['•', '♥', '❀', '✦', '●'];
+  for (let i = 0; i < 32; i++) {
+    const el = document.createElement('span');
+    el.className = 'bg-particle';
+    const isChar = Math.random() > 0.6;
+    if (isChar) {
+      el.textContent = dots[(Math.random() * dots.length) | 0];
+      el.style.background = 'none';
+      el.style.borderRadius = '0';
+      el.style.fontSize = (10 + Math.random() * 14) + 'px';
+    } else {
+      el.style.width = el.style.height = (4 + Math.random() * 9) + 'px';
+      el.style.background = 'rgba(255,130,180,.55)';
+    }
+    el.style.left = (Math.random() * 100) + 'vw';
+    el.style.animationDuration = (10 + Math.random() * 18) + 's';
+    el.style.animationDelay = (-Math.random() * 20) + 's';
+    el.style.color = 'rgba(255,110,170,.65)';
+    document.body.appendChild(el);
+  }
+  document.getElementById('logo').querySelector('p').textContent = CONFIG.logoText;
+})();
+
+/* ===================== 背景音乐：打开页面即播放，播完自动循环 ===================== */
+bgm.src = CONFIG.musicUrl;
+bgm.loop = true;                       // 放完重新播放
+function playMusic() {
+  bgm.play().catch(() => {/* 静默等待交互后重试 */});
+}
+window.addEventListener('load', () => {
+  /* 浏览器自动播放限制：先正常尝试；被拦截则静音播放，首次触摸/点击后恢复音量 */
+  bgm.play().catch(() => {
+    bgm.muted = true;
+    bgm.play().catch(() => {});
+    document.addEventListener('pointerdown', () => {
+      bgm.muted = false;
+      bgm.play().catch(() => {});
+    }, { once: true });
+  });
+});
+/* 兜底：任意首次交互再尝试一次 */
+document.addEventListener('pointerdown', playMusic, { once: true });
+</script>
+</body>
+</html>
