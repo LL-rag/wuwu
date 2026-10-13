@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>星空倒计时 · 星际球</title>
+
+<!-- ============ OG 分享标签占位（替换下面的"占位"内容即可） ============ -->
+<meta property="og:title" content="【标题占位】星空倒计时特效">
+<meta property="og:description" content="【描述占位】从星空倒计时到互动星球的沉浸式视觉特效">
+<meta property="og:image" content="【封面图 URL 占位，建议使用 https 绝对地址】">
+<meta property="og:type" content="website">
+<meta property="og:url" content="【页面 URL 占位】">
+<meta name="twitter:card" content="summary_large_image">
+<!-- ============ OG 标签占位结束 ============ -->
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    overscroll-behavior: none;
+  }
+  body { position: fixed; inset: 0; }
+  canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<audio id="bgm" src="/audio/j.mp3" loop></audio>
+
+<script>
+(function () {
+  "use strict";
+
+  const canvas = document.getElementById("scene");
+  const ctx = canvas.getContext("2d");
+
+  let W = 0, H = 0, DPR = 1;
+
+  /* ---------------- 工具函数 ---------------- */
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  function smoothstep(a, b, x) {
+    x = clamp((x - a) / (b - a), 0, 1);
+    return x * x * (3 - 2 * x);
+  }
+  const cross = (a, b) => ({
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x
+  });
+  const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+  const scale = (a, s) => ({ x: a.x * s, y: a.y * s, z: a.z * s });
+  const len = (v) => Math.hypot(v.x, v.y, v.z);
+  const normV = (v) => { const l = len(v) || 1; return { x: v.x / l, y: v.y / l, z: v.z / l }; };
+
+  function rotate3d(x, y, z, rx, ry) {
+    // 先绕 Y 轴，再绕 X 轴
+    const cy = Math.cos(ry), sy = Math.sin(ry);
+    const x1 = x * cy + z * sy;
+    const z1 = -x * sy + z * cy;
+    const cx = Math.cos(rx), sx = Math.sin(rx);
+    const y2 = y * cx - z1 * sx;
+    const z2 = y * sx + z1 * cx;
+    return { x: x1, y: y2, z: z2 };
+  }
+
+  /* ---------------- 尺寸 ---------------- */
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (phase === "countdown") setDigit(String(currentDigit));
+  }
+  window.addEventListener("resize", resize);
+
+  /* ---------------- 背景星空 ---------------- */
+  const BG_COUNT = 220;
+  const bgStars = [];
+  for (let i = 0; i < BG_COUNT; i++) {
+    bgStars.push({
+      x: Math.random(), y: Math.random(),
+      size: rand(0.4, 1.6),
+      tw: rand(0, Math.PI * 2),
+      sp: rand(0.4, 2.2)
+    });
+  }
+
+  /* ---------------- 主星群 ---------------- */
+  const STAR_COUNT = 1300;
+  const stars = [];
+  for (let i = 0; i < STAR_COUNT; i++) {
+    stars.push({
+      px: rand(-0.4, 0.4), py: rand(-0.4, 0.4), pz: 0,
+      tx: 0, ty: 0, tz: 0,
+      dir: { x: 0, y: 0, z: 0 },
+      jx: 0, jy: 0, jz: 0,
+      size: rand(0.8, 2.2),
+      tw: rand(0, Math.PI * 2),
+      sp: rand(1.5, 3.5),
+      ms: rand(0.05, 0.18) // 每颗星星的移动速度（用于数字切换时错峰换位）
+    });
+  }
+  // 斐波那契球面均匀分布（用于汇聚成球）
+  (function assignDirs() {
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const y = 1 - (i / (STAR_COUNT - 1)) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = golden * i;
+      stars[i].dir = { x: Math.cos(th) * r, y: y, z: Math.sin(th) * r };
+      const j = normV({ x: rand(-1, 1), y: rand(-1, 1), z: rand(-1, 1) });
+      stars[i].jx = j.x; stars[i].jy = j.y; stars[i].jz = j.z;
+    }
+  })();
+
+  // 从离屏画布采样字符形状的亮点
+  function digitPoints(chars) {
+    const cw = 300, chh = 200;
+    const off = document.createElement("canvas");
+    off.width = cw; off.height = chh;
+    const c = off.getContext("2d");
+    c.clearRect(0, 0, cw, chh);
+    c.fillStyle = "#fff";
+    c.font = "900 150px Arial, 'Segoe UI', sans-serif";
+    c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText(chars, cw / 2, chh / 2 + 6);
+    const data = c.getImageData(0, 0, cw, chh).data;
+    const pts = [];
+    const step = 3;
+    for (let y = 0; y < chh; y += step) {
+      for (let x = 0; x < cw; x += step) {
+        if (data[(y * cw + x) * 4 + 3] > 100) pts.push({ x: x - cw / 2, y: y - chh / 2 });
+      }
+    }
+    return pts;
+  }
+
+  function setDigit(chars) {
+    const S = Math.min(W, H);
+    const k = S * 0.0026; // 世界单位换算
+    const pts = digitPoints(chars);
+    if (!pts.length) return;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const d = pts[i % pts.length];
+      const s = stars[i];
+      s.tx = d.x * k + rand(-0.6, 0.6);
+      s.ty = d.y * k + rand(-0.6, 0.6);
+      s.tz = 0;
+    }
+  }
+
+  /* ---------------- 球面 3 个方框 ---------------- */
+  const frameDefs = [];
+  (function buildFrames() {
+    const centers = [
+      { x: 1, y: 0.12, z: 0.05 },
+      { x: -0.15, y: 0.78, z: -0.6 },
+      { x: -0.9, y: -0.38, z: 0.12 },
+      { x: 0.55, y: -0.72, z: 0.42 }
+    ];
+    const half = 0.22;
+    centers.forEach(function (cc) {
+      const c = normV(cc);
+      let up = { x: 0, y: 1, z: 0 };
+      let u = cross(up, c);
+      if (len(u) < 1e-4) u = cross({ x: 0, y: 0, z: 1 }, c);
+      u = normV(u);
+      const v = normV(cross(c, u));
+      const corners = [
+        add(c, add(scale(u, -half), scale(v, -half))),
+        add(c, add(scale(u, half), scale(v, -half))),
+        add(c, add(scale(u, half), scale(v, half))),
+        add(c, add(scale(u, -half), scale(v, half)))
+      ];
+      frameDefs.push(corners);
+    });
+  })();
+
+  /* ---------------- 状态与计时 ---------------- */
+  const COUNT_FROM = 5;
+  let phase = "countdown"; // countdown -> forming -> sphere
+  let currentDigit = COUNT_FROM;
+  let startTime = performance.now();
+  let formStart = 0;
+
+  let rotX = 0.35, rotY = 0;
+  let zoom = 0;
+  let zoomTarget = 0; // 直接放大/缩小：目标档位（0=正常，1=放大散开）
+  let dragging = false;
+  let pulse = 0; // 数字切换时的发光脉冲 0..1
+
+  setDigit(String(COUNT_FROM));
+
+  /* ---------------- 背景音乐 ---------------- */
+  const bgmEl = document.getElementById("bgm");
+  function tryPlayBgm() {
+    if (bgmEl && bgmEl.paused) {
+      const p = bgmEl.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  }
+  tryPlayBgm(); // 倒计时一开始就尝试播放（浏览器自动播放策略可能拦截，拦截则首次点击/触摸自动开始）
+  window.addEventListener("pointerdown", tryPlayBgm);
+  window.addEventListener("touchstart", tryPlayBgm);
+  window.addEventListener("keydown", tryPlayBgm);
+
+  /* ---------------- 点击生成粒子 ---------------- */
+  const sparks = [];
+  function explode(x, y) {
+    for (let i = 0; i < 40; i++) {
+      const a = rand(0, Math.PI * 2), spd = rand(1, 6.5);
+      sparks.push({ x: x, y: y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: 1 });
+    }
+  }
+
+  /* ---------------- 交互：鼠标 ---------------- */
+  let lastX = 0, lastY = 0, moved = 0;
+
+  canvas.addEventListener("mousedown", function (e) {
+    dragging = true; lastX = e.clientX; lastY = e.clientY; moved = 0;
+  });
+  window.addEventListener("mousemove", function (e) {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    rotY -= dx * 0.005;
+    rotX = clamp(rotX - dy * 0.005, -Math.PI / 2 + 0.12, Math.PI / 2 - 0.12);
+  });
+  window.addEventListener("mouseup", function (e) {
+    if (dragging && moved < 6 && phase !== "countdown") explode(e.clientX, e.clientY);
+    dragging = false;
+  });
+  canvas.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    zoomTarget = e.deltaY < 0 ? 1 : 0;
+  }, { passive: false });
+
+  /* ---------------- 交互：触摸 ---------------- */
+  let tLastDist = 0, tPinchStart = 0, tLastCX = 0, tLastCY = 0, tCount = 0, tMoved = 0;
+
+  canvas.addEventListener("touchstart", function (e) {
+    e.preventDefault();
+    const t = e.touches;
+    tCount = t.length;
+    if (t.length === 1) {
+      tLastCX = t[0].clientX; tLastCY = t[0].clientY; tMoved = 0;
+      dragging = true;
+    } else if (t.length === 2) {
+      tPinchStart = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+      tLastDist = tPinchStart;
+      tLastCX = (t[0].clientX + t[1].clientX) / 2;
+      tLastCY = (t[0].clientY + t[1].clientY) / 2;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", function (e) {
+    e.preventDefault();
+    const t = e.touches;
+    if (t.length === 1) {
+      const dx = t[0].clientX - tLastCX, dy = t[0].clientY - tLastCY;
+      tLastCX = t[0].clientX; tLastCY = t[0].clientY;
+      tMoved += Math.abs(dx) + Math.abs(dy);
+      rotY -= dx * 0.005;
+      rotX = clamp(rotX - dy * 0.005, -Math.PI / 2 + 0.12, Math.PI / 2 - 0.12);
+    } else if (t.length === 2) {
+      const d = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+      const cx = (t[0].clientX + t[1].clientX) / 2;
+      const cy = (t[0].clientY + t[1].clientY) / 2;
+      // 双指捏合：超过阈值直接切换到放大/缩小档位（带滞回，避免来回抖动）
+      if (tPinchStart > 0) {
+        if (d > tPinchStart * 1.08) { zoomTarget = 1; tPinchStart = d; }
+        else if (d < tPinchStart * 0.92) { zoomTarget = 0; tPinchStart = d; }
+      }
+      const dx = cx - tLastCX, dy = cy - tLastCY;
+      rotY -= dx * 0.005;
+      rotX = clamp(rotX - dy * 0.005, -Math.PI / 2 + 0.12, Math.PI / 2 - 0.12);
+      tLastDist = d; tLastCX = cx; tLastCY = cy;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", function (e) {
+    e.preventDefault();
+    if (tCount === 1 && tMoved < 10 && phase !== "countdown") explode(tLastCX, tLastCY);
+    dragging = false; tLastDist = 0; tCount = 0;
+  });
+
+  /* ---------------- 主循环 ---------------- */
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const t = now / 1000;
+    const S = Math.min(W, H);
+    const R = S * 0.30;   // 汇聚后的球半径
+    const f = S * 0.95;   // 焦距
+
+    // 背景
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+
+    // 背景星空
+    for (let i = 0; i < BG_COUNT; i++) {
+      const b = bgStars[i];
+      const a = 0.35 + 0.6 * Math.abs(Math.sin(t * b.sp + b.tw));
+      ctx.fillStyle = "rgba(255,255,255," + (a * 0.55).toFixed(3) + ")";
+      ctx.fillRect(b.x * W, b.y * H, b.size, b.size);
+    }
+
+    // 时间线推进
+    if (phase === "countdown") {
+      const elapsed = (now - startTime) / 1000;
+      const digit = Math.ceil(COUNT_FROM - elapsed);
+      if (digit !== currentDigit && digit >= 1) { currentDigit = digit; setDigit(String(digit)); pulse = 1; }
+      if (elapsed >= COUNT_FROM) { phase = "forming"; formStart = now; }
+    } else if (phase === "forming") {
+      if (now - formStart > 1800) phase = "sphere";
+    }
+
+    // 直接放大/缩小：快速过渡到目标档位
+    zoom += (zoomTarget - zoom) * 0.28;
+    if (Math.abs(zoomTarget - zoom) < 0.01) zoom = zoomTarget;
+
+    // 缩放与散开
+    let scatterAmt = 0;
+    if (phase === "forming" || phase === "sphere") {
+      scatterAmt = smoothstep(0.55, 1.0, zoom);
+    }
+    const effR = R * (1 + zoom * 0.9);
+
+    // 空闲时缓慢自转
+    if (!dragging && (phase === "forming" || phase === "sphere")) rotY += 0.0012;
+
+    // 球心柔光
+    if (phase === "forming" || phase === "sphere") {
+      const coreR = effR * (1 - scatterAmt * 0.9);
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, coreR);
+      g.addColorStop(0, "rgba(150,185,255,0.10)");
+      g.addColorStop(0.5, "rgba(85,120,205,0.05)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(W / 2 - coreR, H / 2 - coreR, coreR * 2, coreR * 2);
+    }
+
+    // 数字切换发光闪光
+    if (phase === "countdown" && pulse > 0.02) {
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, S * 0.45);
+      g.addColorStop(0, "rgba(255,255,255," + (pulse * 0.35).toFixed(3) + ")");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 主星群
+    const boost = phase === "countdown" ? 1 + pulse * 0.7 : 1;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const s = stars[i];
+      const lerpK = phase === "countdown" ? s.ms : 0.06; // 数字切换时每颗星星速度不同，错峰换位
+      let tx, ty, tz;
+      if (phase === "forming" || phase === "sphere") {
+        tx = s.dir.x * effR + s.jx * scatterAmt * R * 1.1;
+        ty = s.dir.y * effR + s.jy * scatterAmt * R * 1.1;
+        tz = s.dir.z * effR + s.jz * scatterAmt * R * 1.1;
+      } else {
+        tx = s.tx; ty = s.ty; tz = s.tz;
+      }
+      s.px += (tx - s.px) * lerpK;
+      s.py += (ty - s.py) * lerpK;
+      s.pz += (tz - s.pz) * lerpK;
+
+      const r = rotate3d(s.px, s.py, s.pz, rotX, rotY);
+      const sc = f / (f - r.z);
+      const sx = W / 2 + r.x * sc;
+      const sy = H / 2 + r.y * sc;
+      const tw = 0.75 + 0.25 * Math.sin(t * s.sp + s.tw);
+      const a = clamp((r.z + R) / (2 * R) * 0.9 + 0.3, 0.15, 1) * tw * boost;
+      ctx.fillStyle = "rgba(255,255,255," + Math.min(1, a).toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(0.4, s.size * sc * 0.8 * Math.sqrt(boost)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 球面 3 个白色方框
+    if (phase === "forming" || phase === "sphere") {
+      const lw = Math.max(1.2, S * 0.009);
+      for (let i = 0; i < frameDefs.length; i++) {
+        const fm = frameDefs[i];
+        let sumZ = 0;
+        const pts = [];
+        for (let j = 0; j < 4; j++) {
+          const c = fm[j];
+          const r = rotate3d(c.x * effR, c.y * effR, c.z * effR, rotX, rotY);
+          sumZ += r.z;
+          const sc = f / (f - r.z);
+          pts.push([W / 2 + r.x * sc, H / 2 + r.y * sc]);
+        }
+        const depth = clamp((sumZ / 4 + R) / (2 * R), 0, 1);
+        const alpha = 0.28 + 0.72 * depth;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j <= 4; j++) { const p = pts[j % 4]; ctx.lineTo(p[0], p[1]); }
+        // 发光底描
+        ctx.strokeStyle = "rgba(255,255,255," + (alpha * 0.20).toFixed(3) + ")";
+        ctx.lineWidth = lw * 3.2;
+        ctx.stroke();
+        // 主体描边
+        ctx.strokeStyle = "rgba(255,255,255," + alpha.toFixed(3) + ")";
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    }
+
+    // 点击粒子
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const sp = sparks[i];
+      sp.x += sp.vx; sp.y += sp.vy;
+      sp.vx *= 0.94; sp.vy *= 0.94;
+      sp.life -= 0.03;
+      if (sp.life <= 0) { sparks.splice(i, 1); continue; }
+      ctx.fillStyle = "rgba(255,255,255," + sp.life.toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 发光脉冲衰减
+    pulse *= 0.90;
+  }
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
