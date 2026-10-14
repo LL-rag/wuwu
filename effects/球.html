@@ -63,6 +63,7 @@
 <body>
 <canvas id="scene"></canvas>
 <audio id="bgm" src="/audio/j.mp3" loop></audio>
+<audio id="bgm2" src="/audio/tt.mp3" loop></audio>
 <div id="videoOverlay">
   <video id="player" src="" autoplay loop muted playsinline
     style="position:fixed; inset:0; width:100%; height:100%; object-fit:cover;"></video>
@@ -243,7 +244,10 @@
 
   /* ---------------- 背景音乐 ---------------- */
   const bgmEl = document.getElementById("bgm");
+  const bgm2El = document.getElementById("bgm2");
+  let videoOpen = false; // 是否在视频页（视频页只播 tt.mp3，不播球体页音乐）
   function tryPlayBgm() {
+    if (videoOpen) return;
     if (bgmEl && bgmEl.paused) {
       const p = bgmEl.play();
       if (p && p.catch) p.catch(function () {});
@@ -259,7 +263,12 @@
   const playerEl = document.getElementById("player");
   const backBtnEl = document.getElementById("backBtn");
   function openVideo(n) {
-    if (bgmEl) bgmEl.pause(); // 进入视频页：暂停背景音乐，只播视频
+    videoOpen = true;
+    if (bgmEl) bgmEl.pause();             // 停第一首音乐 j.mp3
+    if (bgm2El) {                          // 播第二首音乐 tt.mp3
+      const p2 = bgm2El.play();
+      if (p2 && p2.catch) p2.catch(function () {});
+    }
     playerEl.src = "/video/P" + n + ".mp4";
     overlayEl.classList.add("show");
     playerEl.load();
@@ -267,11 +276,13 @@
     if (p && p.catch) p.catch(function () {});
   }
   function closeVideo() {
+    if (bgm2El) bgm2El.pause();           // 停第二首音乐 tt.mp3
+    videoOpen = false;
     playerEl.pause();
     playerEl.removeAttribute("src");
     playerEl.load();
     overlayEl.classList.remove("show");
-    tryPlayBgm(); // 返回球体页面：恢复背景音乐
+    tryPlayBgm();                          // 播回第一首音乐 j.mp3
   }
   backBtnEl.addEventListener("click", closeVideo);
   function tryOpenFrame(x, y) {
