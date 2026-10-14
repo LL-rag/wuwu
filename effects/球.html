@@ -265,7 +265,8 @@
   function openVideo(n) {
     videoOpen = true;
     if (bgmEl) bgmEl.pause();             // 停第一首音乐 j.mp3
-    if (bgm2El) {                          // 播第二首音乐 tt.mp3
+    if (bgm2El) {                          // 播第二首音乐 tt.mp3（每次从头播放）
+      bgm2El.currentTime = 0;
       const p2 = bgm2El.play();
       if (p2 && p2.catch) p2.catch(function (err) { console.error("bgm2 播放失败：", err); });
     }
