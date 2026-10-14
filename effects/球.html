@@ -259,6 +259,7 @@
   const playerEl = document.getElementById("player");
   const backBtnEl = document.getElementById("backBtn");
   function openVideo(n) {
+    if (bgmEl) bgmEl.pause(); // 进入视频页：暂停背景音乐，只播视频
     playerEl.src = "/video/P" + n + ".mp4";
     overlayEl.classList.add("show");
     playerEl.load();
@@ -270,6 +271,7 @@
     playerEl.removeAttribute("src");
     playerEl.load();
     overlayEl.classList.remove("show");
+    tryPlayBgm(); // 返回球体页面：恢复背景音乐
   }
   backBtnEl.addEventListener("click", closeVideo);
   function tryOpenFrame(x, y) {
