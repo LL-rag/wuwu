@@ -31,11 +31,43 @@
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* 视频弹层 */
+  #videoOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: none;
+    background: #000;
+  }
+  #videoOverlay.show { display: block; }
+  #backBtn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 21;
+    padding: 9px 18px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    color: #fff;
+    font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI",
+      "PingFang SC", "Microsoft YaHei", sans-serif;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  }
 </style>
 </head>
 <body>
 <canvas id="scene"></canvas>
 <audio id="bgm" src="/audio/j.mp3" loop></audio>
+<div id="videoOverlay">
+  <video id="player" src="" autoplay loop muted playsinline
+    style="position:fixed; inset:0; width:100%; height:100%; object-fit:cover;"></video>
+  <button id="backBtn">返回</button>
+</div>
 
 <script>
 (function () {
@@ -164,8 +196,10 @@
     }
   }
 
-  /* ---------------- 球面 3 个方框 ---------------- */
+  /* ---------------- 球面 4 个方框 ---------------- */
   const frameDefs = [];
+  const frameCenters = []; // 每个方框在球面上的单位中心方向
+  const frameScreen = [];  // 每帧渲染时方框中心的屏幕坐标（用于点击命中与数字标签）
   (function buildFrames() {
     const centers = [
       { x: 1, y: 0.12, z: 0.05 },
@@ -176,6 +210,7 @@
     const half = 0.22;
     centers.forEach(function (cc) {
       const c = normV(cc);
+      frameCenters.push(c);
       let up = { x: 0, y: 1, z: 0 };
       let u = cross(up, c);
       if (len(u) < 1e-4) u = cross({ x: 0, y: 0, z: 1 }, c);
@@ -219,6 +254,35 @@
   window.addEventListener("touchstart", tryPlayBgm);
   window.addEventListener("keydown", tryPlayBgm);
 
+  /* ---------------- 视频弹层（点击数字方框跳转） ---------------- */
+  const overlayEl = document.getElementById("videoOverlay");
+  const playerEl = document.getElementById("player");
+  const backBtnEl = document.getElementById("backBtn");
+  function openVideo(n) {
+    playerEl.src = "/video/P" + n + ".mp4";
+    overlayEl.classList.add("show");
+    playerEl.load();
+    const p = playerEl.play();
+    if (p && p.catch) p.catch(function () {});
+  }
+  function closeVideo() {
+    playerEl.pause();
+    playerEl.removeAttribute("src");
+    playerEl.load();
+    overlayEl.classList.remove("show");
+  }
+  backBtnEl.addEventListener("click", closeVideo);
+  function tryOpenFrame(x, y) {
+    if (phase === "countdown") return false;
+    if (zoomTarget !== 1) return false; // 只有放大散开之后才能点击数字
+    for (let i = 0; i < frameScreen.length; i++) {
+      const fs = frameScreen[i];
+      if (!fs) continue;
+      if (Math.hypot(x - fs.x, y - fs.y) <= Math.max(30, fs.r)) { openVideo(i + 1); return true; }
+    }
+    return false;
+  }
+
   /* ---------------- 点击生成粒子 ---------------- */
   const sparks = [];
   function explode(x, y) {
@@ -243,7 +307,9 @@
     rotX = clamp(rotX - dy * 0.005, -Math.PI / 2 + 0.12, Math.PI / 2 - 0.12);
   });
   window.addEventListener("mouseup", function (e) {
-    if (dragging && moved < 6 && phase !== "countdown") explode(e.clientX, e.clientY);
+    if (dragging && moved < 6 && phase !== "countdown") {
+      if (!tryOpenFrame(e.clientX, e.clientY)) explode(e.clientX, e.clientY);
+    }
     dragging = false;
   });
   canvas.addEventListener("wheel", function (e) {
@@ -296,7 +362,9 @@
 
   canvas.addEventListener("touchend", function (e) {
     e.preventDefault();
-    if (tCount === 1 && tMoved < 10 && phase !== "countdown") explode(tLastCX, tLastCY);
+    if (tCount === 1 && tMoved < 10 && phase !== "countdown") {
+      if (!tryOpenFrame(tLastCX, tLastCY)) explode(tLastCX, tLastCY);
+    }
     dragging = false; tLastDist = 0; tCount = 0;
   });
 
@@ -393,7 +461,7 @@
       ctx.fill();
     }
 
-    // 球面 3 个白色方框
+    // 球面 4 个白色方框
     if (phase === "forming" || phase === "sphere") {
       const lw = Math.max(1.2, S * 0.009);
       for (let i = 0; i < frameDefs.length; i++) {
@@ -421,6 +489,20 @@
         ctx.strokeStyle = "rgba(255,255,255," + alpha.toFixed(3) + ")";
         ctx.lineWidth = lw;
         ctx.stroke();
+
+        // 方框中心投影 + 数字标签
+        const cc = frameCenters[i];
+        const cr = rotate3d(cc.x * effR, cc.y * effR, cc.z * effR, rotX, rotY);
+        const csc = f / (f - cr.z);
+        const ccx = W / 2 + cr.x * csc;
+        const ccy = H / 2 + cr.y * csc;
+        frameScreen[i] = { x: ccx, y: ccy, r: effR * 0.30 * csc };
+        const fsize = Math.max(11, effR * 0.28 * csc);
+        ctx.fillStyle = "rgba(255,255,255," + (alpha * 0.95).toFixed(3) + ")";
+        ctx.font = "600 " + fsize.toFixed(1) + "px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(i + 1), ccx, ccy);
       }
     }
 
