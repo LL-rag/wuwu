@@ -19,28 +19,6 @@
     background:#000308;
     touch-action:none;
   }
-  /* 竖屏时提示横屏游玩 */
-  #rotate {
-    display:none; position:fixed; inset:0; z-index:20;
-    background:#000308; color:#00F0FF;
-    flex-direction:column; align-items:center; justify-content:center; gap:14px;
-    font-family:"PingFang SC","Microsoft YaHei",sans-serif;
-    font-size:18px; letter-spacing:6px; text-align:center;
-  }
-  #rotate .phone {
-    width:30px; height:56px; border:3px solid #00F0FF; border-radius:6px;
-    animation: rot 1.8s ease-in-out infinite;
-  }
-  #rotate #skip {
-    margin-top:18px; padding:10px 26px;
-    border:1px solid #FFE600; border-radius:4px;
-    color:#FFE600; font-size:14px; letter-spacing:3px;
-  }
-  #rotate #tip {
-    color:#4E93A8; font-size:12px; letter-spacing:2px; opacity:.8;
-  }
-  @keyframes rot { 0%,25% { transform:rotate(0deg); } 60%,85% { transform:rotate(90deg); } 100% { transform:rotate(90deg); } }
-  @media (orientation: portrait) { #rotate { display:flex; } }
   /* CRT 扫描线 + 轻微 RGB 荫罩 + 闪烁 */
   #crt {
     position:fixed; inset:0; z-index:5; pointer-events:none;
@@ -67,7 +45,6 @@
 <div id="wrap"><canvas id="game"></canvas></div>
 <div id="crt"></div>
 <div id="vig"></div>
-<div id="rotate"><div class="phone"></div><div>请横屏游玩</div><div id="tip">若已横屏仍停留此页，说明浏览器方向被锁定</div><div id="skip">跳过，直接进入 »</div></div>
 <script>
 (() => {
 'use strict';
@@ -96,12 +73,6 @@ function computeSize() {
 addEventListener('resize', computeSize);
 addEventListener('orientationchange', () => setTimeout(computeSize, 150));
 computeSize();
-
-/* 竖屏遮罩：点击可跳过（应对方向锁定的 WebView） */
-const rotateEl = document.getElementById('rotate');
-function skipRotate() { rotateEl.style.display = 'none'; }
-document.getElementById('skip').addEventListener('click', e => { e.stopPropagation(); skipRotate(); });
-rotateEl.addEventListener('click', skipRotate);
 
 const COL = {
   bg:'#000308', cy:'#00F0FF', mg:'#FF00AA', yl:'#FFE600',
