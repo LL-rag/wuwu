@@ -19,25 +19,22 @@
     background:#000308;
     touch-action:none;
   }
-  /* CRT 扫描线 + 轻微 RGB 荫罩 + 闪烁 */
+  /* CRT 扫描线 + 轻微 RGB 荫罩（静态，不做闪烁动画以保证手机流畅） */
   #crt {
     position:fixed; inset:0; z-index:5; pointer-events:none;
     background:
       repeating-linear-gradient(0deg, rgba(2,0,8,.32) 0px, rgba(2,0,8,.32) 1px, transparent 1px, transparent 3px),
       repeating-linear-gradient(90deg, rgba(255,0,170,.035) 0px, rgba(0,240,255,.035) 1px, rgba(255,230,0,.02) 2px, transparent 3px);
-    animation: crtFlick 3.7s infinite steps(60);
-  }
-  @keyframes crtFlick {
-    0%,100% { opacity:1; }
-    47% { opacity:.96; }
-    49% { opacity:1; }
-    71% { opacity:.92; }
-    73% { opacity:1; }
   }
   /* 暗角 */
   #vig {
     position:fixed; inset:0; z-index:6; pointer-events:none;
     background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,6,.55) 100%);
+  }
+  /* 竖屏时特效层与游戏画面一起旋转 */
+  .rot90 {
+    left:50% !important; top:50% !important;
+    transform: translate(-50%,-50%) rotate(90deg);
   }
 </style>
 </head>
@@ -52,24 +49,46 @@
 /* ================= 基础常量 ================= */
 /* 逻辑分辨率：高度固定，宽度按屏幕横屏比例自适应（16:9 ~ 20:9） */
 const H = 270;
-let W = Math.round(H * Math.min(2.25, Math.max(1.6, innerWidth / Math.max(1, innerHeight) || 1.78)));
+let W = 0;
 const canvas = document.getElementById('game');
 canvas.width = W; canvas.height = H;
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-let FIRE_X = W - 60;   /* 射击按钮位置随 W 变化 */
+let FIRE_X = 0;   /* 射击按钮位置随 W 变化 */
 
 function computeSize() {
-  W = Math.round(H * Math.min(2.25, Math.max(1.6, innerWidth / Math.max(1, innerHeight) || 1.78)));
+  const iw = innerWidth, ih = innerHeight;
+  rotated = ih > iw;      /* 竖屏（微信 WebView 常锁竖屏）：画面整体旋转 90°，手机横过来拿即可 */
+  const ratio = rotated ? ih / iw : iw / ih;
+  W = Math.round(H * Math.min(2.25, Math.max(1.6, ratio)));
   FIRE_X = W - 60;
   canvas.width = W; canvas.height = H;
   ctx.imageSmoothingEnabled = false;      /* 重设画布会重置上下文状态 */
-  /* 手机上铺满屏幕（允许非整数倍，最近邻采样仍保持像素感） */
-  const s = Math.min(innerWidth / W, innerHeight / H);
-  canvas.style.width  = Math.floor(W * s) + 'px';
-  canvas.style.height = Math.floor(H * s) + 'px';
+  if (rotated) {
+    /* 画布布局盒为 屏幕高×屏幕宽，绕中心顺时针转 90° 后正好铺满竖屏 */
+    canvas.style.width  = ih + 'px';
+    canvas.style.height = iw + 'px';
+    canvas.style.transform = 'rotate(90deg)';
+    canvas.style.transformOrigin = '50% 50%';
+    for (const el of fxLayers) {
+      el.classList.add('rot90');
+      el.style.width  = ih + 'px';
+      el.style.height = iw + 'px';
+    }
+  } else {
+    canvas.style.transform = 'none';
+    const s = Math.min(iw / W, ih / H);
+    canvas.style.width  = Math.floor(W * s) + 'px';
+    canvas.style.height = Math.floor(H * s) + 'px';
+    for (const el of fxLayers) {
+      el.classList.remove('rot90');
+      el.style.width = el.style.height = '';
+    }
+  }
 }
+let rotated = false;
+const fxLayers = [document.getElementById('crt'), document.getElementById('vig')];
 addEventListener('resize', computeSize);
 addEventListener('orientationchange', () => setTimeout(computeSize, 150));
 computeSize();
@@ -373,6 +392,7 @@ function flash(col, t) { flashCol = col; flashT = Math.max(flashT, t); }
 function addPop(x, y, txt, col) { pops.push({ x, y, txt, col, life: 0.9 }); }
 function boomFx(x, y, n, big) {
   const cols = [COL.cy, COL.mg, COL.yl, COL.wh];
+  if (parts.length > 110) n = Math.min(n, 12);   /* 手机性能保护：限制粒子总量 */
   for (let i = 0; i < n; i++) {
     const a = rnd(0, 6.29), sp = rnd(20, big ? 170 : 100);
     parts.push({
@@ -381,7 +401,7 @@ function boomFx(x, y, n, big) {
       col: cols[(Math.random() * 4) | 0], sz: big ? ((Math.random() * 3 + 2) | 0) : ((Math.random() * 2 + 1) | 0)
     });
   }
-  parts.push({ x, y, vx: 0, vy: 0, life: 0.12, max: 1, col: COL.wh, sz: big ? 34 : 14 });
+  parts.push({ x, y, vx: 0, vy: 0, life: 0.12, max: 1, col: COL.wh, sz: big ? 22 : 12 });
 }
 function dropPup(x, y, forced) {
   if (!forced && Math.random() > 0.28) return;
@@ -435,8 +455,8 @@ function damagePlayer() {
   if (inv > 0 || shieldT > 0) return;
   lives--;
   combo = 0; mult = 1;
-  boomFx(player.x + 14, player.y + 12, 40, true);
-  S.hit(); shake(6, 0.5); flash('255,60,120', 0.2);
+  boomFx(player.x + 14, player.y + 12, 22, false);
+  S.hit(); shake(4, 0.35); flash('255,60,120', 0.15);
   ebullets = [];
   if (lives <= 0) {
     state = 'over'; overT = 0;
@@ -471,6 +491,10 @@ const fireTouch = new Set();
 const JOY_R = 34, JOY_X = 64, JOY_Y = H - 60;
 const FIRE_R = 30, FIRE_Y = H - 58;
 function touchPos(t) {
+  if (rotated) {
+    /* 画面顺时针旋转 90°：屏幕竖直方向对应游戏 X，屏幕水平（反向）对应游戏 Y */
+    return { x: t.clientY / innerHeight * W, y: (innerWidth - t.clientX) / innerWidth * H };
+  }
   const r = canvas.getBoundingClientRect();
   return { x: (t.clientX - r.left) / r.width * W, y: (t.clientY - r.top) / r.height * H };
 }
@@ -816,7 +840,7 @@ function drawParts() {
   ctx.restore();
 }
 function drawPlayer(now) {
-  const blink = inv > 0 && (Math.floor(now * 14) % 2 === 0);
+  const blink = inv > 0 && (Math.floor(now * 8) % 2 === 0);
   if (!blink) drawSprite(SHIP_PLAYER, player.x, player.y, 2, PAL);
   /* 引擎尾焰 */
   ctx.save();
@@ -856,7 +880,7 @@ function drawHUD(now) {
   /* 分数（弹跳） */
   const sc = Math.max(1, Math.round(1 + scorePulse * 0.4));
   drawCText('得分', W - 52, 4, 10, COL.cy, 'right');
-  drawText(String(Math.round(scoreShown)), W - 52, 17, sc, COL.wh, 'right', COL.cy);
+  drawText(String(Math.round(scoreShown)), W - 52, 17, sc, COL.wh, 'right');
   drawCText('最高 ' + hi, W - 52, 28, 10, '#5E7A88', 'right');
   /* 连击 */
   if (combo >= 3) {
@@ -903,6 +927,7 @@ function drawTitle(now) {
   if (Math.floor(now * 2) % 2 === 0)
     drawCText('点击屏幕或按任意键开始', W / 2, y0 + 108, 14, COL.wh, 'center', COL.cy);
   if (isTouch) {
+    if (rotated) drawCText('将手机横过来拿即可全屏游玩', W / 2, H - 54, 10, '#2A5566', 'center');
     drawCText('左摇杆移动 · 右按钮射击', W / 2, H - 40, 11, '#4E93A8', 'center');
   } else {
     drawCText('键盘：WASD / 方向键移动 · 空格射击', W / 2, H - 40, 10, '#4E93A8', 'center');
@@ -971,9 +996,10 @@ function render() {
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  /* 屏幕震动 */
+  /* 屏幕震动：时间衰减正弦，平滑不卡顿（随机抖在手机上像掉帧） */
   if (shakeT > 0)
-    ctx.translate((Math.random() - 0.5) * shakeMag * 2, (Math.random() - 0.5) * shakeMag * 2);
+    ctx.translate(Math.sin(tGlobal * 70) * shakeMag * shakeT,
+                  Math.cos(tGlobal * 57) * shakeMag * shakeT * 0.7);
 
   /* 星云（慢速视差，双层拼接，拉伸至当前 W） */
   const off = Math.floor((tGlobal * 3) % W);
