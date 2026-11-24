@@ -31,6 +31,14 @@
     width:30px; height:56px; border:3px solid #00F0FF; border-radius:6px;
     animation: rot 1.8s ease-in-out infinite;
   }
+  #rotate #skip {
+    margin-top:18px; padding:10px 26px;
+    border:1px solid #FFE600; border-radius:4px;
+    color:#FFE600; font-size:14px; letter-spacing:3px;
+  }
+  #rotate #tip {
+    color:#4E93A8; font-size:12px; letter-spacing:2px; opacity:.8;
+  }
   @keyframes rot { 0%,25% { transform:rotate(0deg); } 60%,85% { transform:rotate(90deg); } 100% { transform:rotate(90deg); } }
   @media (orientation: portrait) { #rotate { display:flex; } }
   /* CRT 扫描线 + 轻微 RGB 荫罩 + 闪烁 */
@@ -59,7 +67,7 @@
 <div id="wrap"><canvas id="game"></canvas></div>
 <div id="crt"></div>
 <div id="vig"></div>
-<div id="rotate"><div class="phone"></div><div>请横屏游玩</div></div>
+<div id="rotate"><div class="phone"></div><div>请横屏游玩</div><div id="tip">若已横屏仍停留此页，说明浏览器方向被锁定</div><div id="skip">跳过，直接进入 »</div></div>
 <script>
 (() => {
 'use strict';
@@ -67,19 +75,33 @@
 /* ================= 基础常量 ================= */
 /* 逻辑分辨率：高度固定，宽度按屏幕横屏比例自适应（16:9 ~ 20:9） */
 const H = 270;
-const W = Math.round(H * Math.min(2.25, Math.max(1.6, innerWidth / Math.max(1, innerHeight) || 1.78)));
+let W = Math.round(H * Math.min(2.25, Math.max(1.6, innerWidth / Math.max(1, innerHeight) || 1.78)));
 const canvas = document.getElementById('game');
 canvas.width = W; canvas.height = H;
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-function fit() {
+let FIRE_X = W - 60;   /* 射击按钮位置随 W 变化 */
+
+function computeSize() {
+  W = Math.round(H * Math.min(2.25, Math.max(1.6, innerWidth / Math.max(1, innerHeight) || 1.78)));
+  FIRE_X = W - 60;
+  canvas.width = W; canvas.height = H;
+  ctx.imageSmoothingEnabled = false;      /* 重设画布会重置上下文状态 */
   /* 手机上铺满屏幕（允许非整数倍，最近邻采样仍保持像素感） */
   const s = Math.min(innerWidth / W, innerHeight / H);
   canvas.style.width  = Math.floor(W * s) + 'px';
   canvas.style.height = Math.floor(H * s) + 'px';
 }
-addEventListener('resize', fit); fit();
+addEventListener('resize', computeSize);
+addEventListener('orientationchange', () => setTimeout(computeSize, 150));
+computeSize();
+
+/* 竖屏遮罩：点击可跳过（应对方向锁定的 WebView） */
+const rotateEl = document.getElementById('rotate');
+function skipRotate() { rotateEl.style.display = 'none'; }
+document.getElementById('skip').addEventListener('click', e => { e.stopPropagation(); skipRotate(); });
+rotateEl.addEventListener('click', skipRotate);
 
 const COL = {
   bg:'#000308', cy:'#00F0FF', mg:'#FF00AA', yl:'#FFE600',
@@ -476,7 +498,7 @@ canvas.addEventListener('mousedown', () => {
 const joy = { active: false, id: null, x: 0, y: 0 };
 const fireTouch = new Set();
 const JOY_R = 34, JOY_X = 64, JOY_Y = H - 60;
-const FIRE_R = 30, FIRE_X = W - 60, FIRE_Y = H - 58;
+const FIRE_R = 30, FIRE_Y = H - 58;
 function touchPos(t) {
   const r = canvas.getBoundingClientRect();
   return { x: (t.clientX - r.left) / r.width * W, y: (t.clientY - r.top) / r.height * H };
@@ -982,11 +1004,11 @@ function render() {
   if (shakeT > 0)
     ctx.translate((Math.random() - 0.5) * shakeMag * 2, (Math.random() - 0.5) * shakeMag * 2);
 
-  /* 星云（慢速视差，双层拼接） */
+  /* 星云（慢速视差，双层拼接，拉伸至当前 W） */
   const off = Math.floor((tGlobal * 3) % W);
   ctx.globalAlpha = 0.85;
-  ctx.drawImage(neb, -off, 0);
-  ctx.drawImage(neb, W - off, 0);
+  ctx.drawImage(neb, -off, 0, W, H);
+  ctx.drawImage(neb, W - off, 0, W, H);
   ctx.globalAlpha = 1;
 
   /* 星空（多层视差 + 闪烁） */
